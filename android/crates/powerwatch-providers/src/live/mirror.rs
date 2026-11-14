@@ -1,14 +1,10 @@
 //! DTEK mirror's date-specific fact data only. Never repeat its weekly preset.
+use super::dtek_fact::Fact;
 use super::{SourceSchedule, evidence};
 use crate::http::FetchError;
-use chrono::{DateTime, Days, NaiveDateTime, TimeDelta, TimeZone, Utc};
-use powerwatch_core::{
-    grid::{ProviderKind, Queue},
-    model::{ScheduleInterval, ScheduleState, normalize_day},
-    time::{LOCAL_ZONE, day_bounds, local_instant},
-};
+use chrono::{DateTime, TimeDelta, Utc};
+use powerwatch_core::grid::{ProviderKind, Queue};
 use serde::Deserialize;
-use std::collections::BTreeMap;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Response {
@@ -29,13 +25,6 @@ struct UpdateStatus {
 struct Meta {
     schema_version: String,
     content_hash: String,
-}
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Fact {
-    data: BTreeMap<String, BTreeMap<String, BTreeMap<String, String>>>,
-    update: Option<String>,
-    update_fact: Option<String>,
 }
 pub fn parse(
     data: &Response,
@@ -60,64 +49,7 @@ pub fn parse(
     {
         return Err(FetchError::InvalidData);
     }
-    let publication = data
-        .fact
-        .update
-        .as_ref()
-        .or(data.fact.update_fact.as_ref())
-        .and_then(|value| NaiveDateTime::parse_from_str(value, "%d.%m.%Y %H:%M").ok())
-        .and_then(|value| LOCAL_ZONE.from_local_datetime(&value).single())
-        .map(|value| value.with_timezone(&Utc))
-        .ok_or(FetchError::InvalidData)?;
-    if publication > now || now - publication > TimeDelta::days(2) {
-        return Err(FetchError::InvalidData);
-    }
-    let today = now.with_timezone(&LOCAL_ZONE).date_naive();
-    let tomorrow = today
-        .checked_add_days(Days::new(1))
-        .ok_or(FetchError::InvalidData)?;
-    let mut days = Vec::new();
-    let mut found = false;
-    for date in [today, tomorrow] {
-        let (start, _) = day_bounds(date).map_err(|_| FetchError::InvalidData)?;
-        let schedule = data
-            .fact
-            .data
-            .get(&start.timestamp().to_string())
-            .and_then(|groups| groups.get(&format!("GPV{}", queue.code)));
-        let mut intervals = Vec::new();
-        if let Some(hours) = schedule {
-            found = true;
-            for (hour, value) in hours {
-                let hour: u16 = hour.parse().map_err(|_| FetchError::InvalidData)?;
-                if !(1..=24).contains(&hour) {
-                    return Err(FetchError::InvalidData);
-                }
-                let minute = (hour - 1) * 60;
-                use ScheduleState::{Available, Outage, Switching, Unknown};
-                let halves = match value.as_str() {
-                    "yes" => [Available, Available],
-                    "no" => [Outage, Outage],
-                    "first" => [Outage, Available],
-                    "second" => [Available, Outage],
-                    "mfirst" => [Switching, Available],
-                    "msecond" => [Available, Switching],
-                    "maybe" => [Switching, Switching],
-                    _ => [Unknown, Unknown],
-                };
-                for (offset, state) in halves.into_iter().enumerate() {
-                    let minute = minute + offset as u16 * 30;
-                    intervals.push(ScheduleInterval {
-                        start: local_instant(date, minute).map_err(|_| FetchError::InvalidData)?,
-                        end: local_instant(date, minute + 30)
-                            .map_err(|_| FetchError::InvalidData)?,
-                        state,
-                    });
-                }
-            }
-        }
-        days.push(normalize_day(date, &intervals).map_err(|_| FetchError::InvalidData)?);
-    }
+    let (days, publication, found) = super::dtek_fact::parse(&data.fact, queue, now)?;
     if !found {
         return Err(FetchError::InvalidData);
     }

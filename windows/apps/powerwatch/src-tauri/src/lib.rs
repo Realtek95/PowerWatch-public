@@ -812,6 +812,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         updates::install_update,
         get_background_status,
         open_background_settings,
+        open_exact_reminder_settings,
         clear_notification_journal,
         set_notification_preferences,
         set_address_options,

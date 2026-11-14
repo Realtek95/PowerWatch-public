@@ -33,7 +33,7 @@ impl Default for NotificationPreferences {
             forecast_start: true,
             forecast_end: true,
             schedule_changes: true,
-            source_status: true,
+            source_status: false,
             restoration_changes: true,
             source_trouble: false,
             quiet_hours: None,
@@ -50,10 +50,10 @@ impl NotificationPreferences {
                 NotificationKind::ForecastStart => self.forecast_start,
                 NotificationKind::ForecastEnd => self.forecast_end,
                 NotificationKind::ScheduleChanged => self.schedule_changes,
-                NotificationKind::RestorationChanged => self.restoration_changes,
                 NotificationKind::SourceOutage
                 | NotificationKind::SourceRestored
-                | NotificationKind::SourceCleared => self.source_status,
+                | NotificationKind::SourceCleared => false,
+                NotificationKind::RestorationChanged => self.restoration_changes,
                 NotificationKind::SourceTrouble => self.source_trouble,
                 NotificationKind::Test => true,
             }
@@ -398,82 +398,8 @@ pub fn plan_snapshot(
                 prefs,
             ));
         }
-        if (forecast_current || address_current)
-            && prefs.source_status
-            && changes
-                .iter()
-                .any(|change| change.kind == powerwatch_core::history::ChangeKind::SourceStatus)
-        {
-            let report = match (&old.source_status, &snapshot.source_status) {
-                (_, SourceStatus::ReportedUnavailable) => {
-                    Some((NotificationKind::SourceOutage, text::SOURCE_OUTAGE))
-                }
-                (SourceStatus::ReportedUnavailable, SourceStatus::ReportedAvailable) => {
-                    Some((NotificationKind::SourceRestored, text::SOURCE_RESTORED))
-                }
-                (SourceStatus::ReportedUnavailable, SourceStatus::Unknown)
-                    if snapshot.address_check.as_ref().is_some_and(|check| {
-                        check.event.is_none()
-                            && check
-                                .evidence
-                                .usable_at(now, chrono::TimeDelta::minutes(45))
-                    }) =>
-                {
-                    Some((NotificationKind::SourceCleared, text::SOURCE_CLEARED))
-                }
-                _ => None,
-            };
-            if let Some((kind, body)) = report {
-                plans.push(plan(
-                    (key, local_id),
-                    snapshot,
-                    kind,
-                    now,
-                    &source_report_key(snapshot, Some(old), &version),
-                    body.into(),
-                    prefs,
-                ));
-            }
-        }
-    }
-    if previous.is_none()
-        && prefs.source_status
-        && snapshot.source_status == SourceStatus::ReportedUnavailable
-        && snapshot.address_check.as_ref().is_some_and(|check| {
-            check.event.is_some()
-                && check
-                    .evidence
-                    .usable_at(now, chrono::TimeDelta::minutes(45))
-        })
-    {
-        plans.push(plan(
-            (key, local_id),
-            snapshot,
-            NotificationKind::SourceOutage,
-            now,
-            &source_report_key(snapshot, None, "initial"),
-            text::SOURCE_OUTAGE.into(),
-            prefs,
-        ));
     }
     plans.sort_by_key(|plan| plan.at);
     plans.dedup_by(|first, second| first.key == second.key);
     Ok(plans)
-}
-fn source_report_key(
-    snapshot: &ScheduleSnapshot,
-    previous: Option<&ScheduleSnapshot>,
-    fallback: &str,
-) -> String {
-    snapshot
-        .address_check
-        .as_ref()
-        .and_then(|check| check.event.as_ref())
-        .or_else(|| {
-            previous
-                .and_then(|old| old.address_check.as_ref())
-                .and_then(|check| check.event.as_ref())
-        })
-        .map(|event| format!("address:{}", event.id))
-        .unwrap_or_else(|| fallback.to_string())
 }

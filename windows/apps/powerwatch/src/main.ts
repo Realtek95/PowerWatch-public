@@ -35,6 +35,7 @@ import {
 import {
   NotificationSettingsForm,
   journalMarkup,
+  updateReminderStatus,
 } from "./components/notification-settings";
 import { listen } from "@tauri-apps/api/event";
 import { isTauri } from "@tauri-apps/api/core";
@@ -922,6 +923,7 @@ async function refreshNotificationPermission(): Promise<void> {
     const status = await getBackgroundStatus();
     if (revision !== permissionRevision) return;
     notificationsAllowed = status.notificationsAllowed ?? null;
+    updateReminderStatus(shell, status.reminderStatus);
     const notice = shell.querySelector("#notification-permission-notice");
     if (notice) notice.innerHTML = permissionMarkup();
   } catch {

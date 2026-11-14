@@ -7,16 +7,14 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import android.os.Build
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.*
 import org.json.JSONObject
-import java.time.Instant
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
@@ -38,6 +36,7 @@ object BackgroundBridge {
     fun configure(context: Context) {
         val app = context.applicationContext
         PowerWatchWidget.refreshDefinitions(app)
+        ReminderAlarms.invalidate(app)
         val periodic = PeriodicWorkRequestBuilder<PulseWorker>(15, TimeUnit.MINUTES).build()
         WorkManager.getInstance(app).enqueueUniquePeriodicWork("powerwatch-pulse", ExistingPeriodicWorkPolicy.KEEP, periodic)
         enqueueLocal(app, ExistingWorkPolicy.KEEP)
@@ -78,29 +77,7 @@ object BackgroundBridge {
         PowerWatchWidget.updateAll(context)
         return tick.optLong("nextDelaySeconds", 900).coerceAtLeast(5)
     }
-    private fun intent(context: Context, key: String) = Intent(context, ReminderReceiver::class.java).setData(Uri.parse("powerwatch://reminder/${Uri.encode(key)}")).putExtra("key", key)
-    @Synchronized fun syncAlarms(context: Context) {
-        val value = call(context, "pending") as? JSONObject ?: return
-        val now = Instant.parse(value.getString("now")).toEpochMilli()
-        val records = value.getJSONArray("notifications")
-        val keys = mutableSetOf<String>()
-        val manager = context.getSystemService(AlarmManager::class.java)
-        for (index in 0 until records.length()) {
-            val plan = records.getJSONObject(index).getJSONObject("plan")
-            val key = plan.getString("key"); keys.add(key)
-            val pending = PendingIntent.getBroadcast(context, 0, intent(context,key), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            val remaining = Instant.parse(plan.getString("at")).toEpochMilli() - now
-            if (remaining <= 0) { deliver(context, key); continue }
-            // Inexact alarms need no privileged exact-alarm permission. Doze can delay them.
-            manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + remaining.coerceAtLeast(100), pending)
-        }
-        val preferences = context.getSharedPreferences("powerwatch", 0)
-        for (old in preferences.getStringSet("alarms", emptySet())!!.minus(keys)) {
-            val pending = PendingIntent.getBroadcast(context, 0, intent(context,old), PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)
-            if (pending != null) { manager.cancel(pending); pending.cancel() }
-        }
-        preferences.edit().putStringSet("alarms", keys).apply()
-    }
+    fun syncAlarms(context: Context) = ReminderAlarms.sync(context)
     @Synchronized fun deliver(context: Context, key: String) {
         val permitted = NotificationManagerCompat.from(context).areNotificationsEnabled()
         val record = call(context,"claim",JSONObject().put("key",key).put("permission",permitted)) as? JSONObject ?: return
@@ -116,6 +93,7 @@ object BackgroundBridge {
             val open = PendingIntent.getActivity(context,0,Intent(context,MainActivity::class.java).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             val notification = NotificationCompat.Builder(context,channelId).setSmallIcon(R.drawable.ic_notification).setContentTitle(plan.getString("title")).setContentText(plan.getString("body")).setStyle(NotificationCompat.BigTextStyle().bigText(plan.getString("body"))).setAutoCancel(true).setContentIntent(open).build()
             manager.notify(record.getLong("id").toInt(),notification)
+            context.getSharedPreferences("powerwatch", 0).edit().putLong("reminderSubmittedAt", System.currentTimeMillis()).apply()
         } catch (error: Exception) {
             call(context,"ack",JSONObject().put("key",key)); Log.e("PowerWatch","OS notification rejected",error)
         }
@@ -135,13 +113,25 @@ class PulseWorker(context: Context, params: WorkerParameters): Worker(context,pa
 class ReminderReceiver: BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val pending = goAsync()
-        Executors.newSingleThreadExecutor().apply { execute { try { intent.getStringExtra("key")?.let { BackgroundBridge.deliver(context,it) } } catch (error: Exception) {Log.e("PowerWatch","Reminder failed",error)} finally {pending.finish();shutdown()} } }
+        val wake = context.getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PowerWatch:reminder")
+        wake.acquire(9_000)
+        Executors.newSingleThreadExecutor().apply { execute {
+            try {
+                ReminderAlarms.received(context)
+                intent.getStringExtra("key")?.let { BackgroundBridge.deliver(context,it) }
+                BackgroundBridge.syncAlarms(context)
+            } catch (error: Exception) {
+                Log.e("PowerWatch","Reminder failed",error)
+                BackgroundBridge.enqueueLocal(context,ExistingWorkPolicy.KEEP)
+            } finally { if (wake.isHeld) wake.release(); pending.finish(); shutdown() }
+        } }
     }
 }
 class BootReceiver: BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if(intent.action==Intent.ACTION_MY_PACKAGE_REPLACED)PowerWatchWidget.refreshDefinitions(context)
-        if (intent.action in setOf(Intent.ACTION_BOOT_COMPLETED,Intent.ACTION_MY_PACKAGE_REPLACED,Intent.ACTION_TIME_CHANGED,Intent.ACTION_TIMEZONE_CHANGED)) {
+        if (intent.action in setOf(Intent.ACTION_BOOT_COMPLETED,Intent.ACTION_MY_PACKAGE_REPLACED,Intent.ACTION_TIME_CHANGED,Intent.ACTION_TIMEZONE_CHANGED,AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED)) {
+            ReminderAlarms.invalidate(context)
             BackgroundBridge.enqueueLocal(context,ExistingWorkPolicy.REPLACE)
         }
     }

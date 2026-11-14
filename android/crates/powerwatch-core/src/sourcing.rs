@@ -32,11 +32,19 @@ pub struct ResolvedDay {
     pub day: DaySchedule,
     pub provenance: Vec<IntervalEvidence>,
 }
-fn rank(kind: &ProviderKind) -> u8 {
-    match kind {
-        ProviderKind::Operator => 1,
-        ProviderKind::Aggregator => 2,
-        ProviderKind::Mirror => 3,
+fn rank(proof: &SourceEvidence) -> u8 {
+    match &proof.provider.kind {
+        ProviderKind::Operator
+            if matches!(
+                & proof.scope, SourceScope::Queue(queue) if proof.provider.id == queue
+                .operator_id
+            ) =>
+        {
+            1
+        }
+        ProviderKind::Operator => 2,
+        ProviderKind::Aggregator => 3,
+        ProviderKind::Mirror => 4,
         ProviderKind::Synthetic => u8::MAX,
     }
 }
@@ -103,8 +111,14 @@ pub fn resolve_day(
     for pair in points.windows(2) {
         let mut choices: Vec<(u8, ScheduleState, &SourceEvidence, bool)> = Vec::new();
         for candidate in &forecasts {
-            let priority = rank(&candidate.evidence.provider.kind)
-                .saturating_add(if candidate.retained { 10 } else { 0 });
+            let source_priority = if candidate.emergency_dates.contains(&date)
+                && candidate.evidence.provider.kind == ProviderKind::Operator
+            {
+                1
+            } else {
+                rank(&candidate.evidence)
+            };
+            let priority = source_priority.saturating_add(if candidate.retained { 10 } else { 0 });
             if candidate.emergency_dates.contains(&date) {
                 choices.push((
                     priority,
@@ -134,9 +148,10 @@ pub fn resolve_day(
         let retained: Vec<_> = choices.iter().filter(|choice| choice.3).copied().collect();
         choices.retain(|choice| {
             choice.3
-                || (choice.0 == 1 && choice.1 == ScheduleState::Unknown)
+                || (choice.2.provider.kind == ProviderKind::Operator
+                    && choice.1 == ScheduleState::Unknown)
                 || !retained.iter().any(|old| {
-                    rank(&old.2.provider.kind) <= rank(&choice.2.provider.kind)
+                    rank(old.2) <= rank(choice.2)
                         && old
                             .2
                             .published_at

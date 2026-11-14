@@ -60,7 +60,6 @@ export const uk = {
     forecastStart: "Початок періоду за графіком",
     forecastEnd: "Завершення періоду за графіком",
     scheduleChanges: "Зміни графіка",
-    sourceStatus: "Повідомлення джерела про відключення/відновлення",
     restorationChanges: "Зміна часу відновлення",
   },
   notificationStates: {
@@ -108,6 +107,14 @@ export const uk = {
   androidBackgroundSettings: "Налаштування фонової роботи",
   androidBackgroundHelp:
     "Доступ до інтернету надається під час установлення. Обмеження фонових даних і батареї налаштовуються в Android.",
+  exactReminders: "Точні нагадування",
+  exactRemindersAllowed: "Точні нагадування увімкнено.",
+  exactRemindersDenied:
+    "Дозвольте точні нагадування, щоб телефон міг вчасно попереджати про відключення. Без дозволу Android може затримувати нагадування.",
+  exactRemindersAllow: "Дозволити точні нагадування",
+  exactRemindersManage: "Налаштувати дозвіл",
+  reminderBatteryRestricted:
+    "Економія заряду або заборона фонової роботи може затримувати нагадування. Перевірте налаштування батареї для PowerWatch.",
   systemSettingsOpened: "Системні налаштування відкрито.",
   sourceCheckStatuses: {
     ok: "Дані отримано",

@@ -80,6 +80,9 @@ export function getBackgroundStatus(): Promise<BackgroundStatus> {
 export function openBackgroundSettings(): Promise<void> {
   return isTauri() ? invoke("open_background_settings") : readOnly();
 }
+export function openExactReminderSettings(): Promise<void> {
+  return isTauri() ? invoke("open_exact_reminder_settings") : readOnly();
+}
 export function clearNotificationJournal(id: number | null): Promise<void> {
   return isTauri() ? invoke("clear_notification_journal", { id }) : readOnly();
 }

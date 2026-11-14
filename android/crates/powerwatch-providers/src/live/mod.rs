@@ -1,6 +1,7 @@
 //! Live queue forecasts. No adapter here claims to measure a home's power.
 pub mod address;
 pub mod dtek;
+mod dtek_fact;
 pub mod mirror;
 mod retention;
 pub mod service;

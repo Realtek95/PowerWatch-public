@@ -76,6 +76,23 @@ pub fn notification_state(app: &tauri::AppHandle) -> Result<Option<bool>, Comman
 pub fn notification_allowed(app: &tauri::AppHandle) -> Result<bool, CommandError> {
     Ok(notification_state(app)?.unwrap_or(false))
 }
+pub fn reminder_status(app: &tauri::AppHandle) -> Result<ReminderStatus, CommandError> {
+    app.state::<AndroidHandle>()
+        .0
+        .run_mobile_plugin("reminderStatus", json!({}))
+        .map_err(|_| CommandError {
+            code: "platform_error",
+        })
+}
+pub fn open_exact_reminder_settings(app: &tauri::AppHandle) -> Result<(), CommandError> {
+    app.state::<AndroidHandle>()
+        .0
+        .run_mobile_plugin::<Value>("requestExactReminders", json!({}))
+        .map_err(|_| CommandError {
+            code: "platform_error",
+        })?;
+    Ok(())
+}
 pub fn open_background_settings(app: &tauri::AppHandle) -> Result<(), CommandError> {
     app.state::<AndroidHandle>()
         .0

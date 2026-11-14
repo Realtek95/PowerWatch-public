@@ -83,6 +83,12 @@ export interface NotificationRecord {
 }
 export interface BackgroundStatus {
   notificationsAllowed?: boolean | null;
+  reminderStatus?: {
+    exactAllowed: boolean;
+    exactAccessRequired: boolean;
+    batterySaver: boolean;
+    backgroundRestricted: boolean;
+  };
   preferences: NotificationPreferences;
   notifications: NotificationRecord[];
   polls: {

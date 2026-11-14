@@ -57,6 +57,19 @@ class PowerWatchPlugin(private val activity: Activity) : Plugin(activity) {
             .put("pending", (activity as? MainActivity)?.notificationPermissionPending == true))
     }
     @Command
+    fun reminderStatus(invoke: Invoke) {
+        invoke.resolve(JSObject(ReminderAlarms.status(activity).toString()))
+    }
+    @Command
+    fun requestExactReminders(invoke: Invoke) {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 31) {
+                activity.startActivity(Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, android.net.Uri.parse("package:${activity.packageName}")))
+            }
+            invoke.resolve(JSObject())
+        } catch (_: Exception) { invoke.reject("platform_error") }
+    }
+    @Command
     fun openBackgroundSettings(invoke: Invoke) {
         try {
             activity.startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:${activity.packageName}")))

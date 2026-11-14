@@ -526,6 +526,16 @@ impl LiveService {
             };
             Ok(())
         };
+        if queue.operator_id == "ua.dso.dtek-dnem" {
+            retain(
+                &mut bundle,
+                "dtek-dnem",
+                self.direct.forecast(&self.http, queue, completed()),
+            )?;
+            if !diagnostic && !needs_backup(&bundle.candidates, queue, completed()) {
+                return Ok(bundle);
+            }
+        }
         if let Some(region) = &operator.yasno {
             let result = (|| {
                 let url = format!(

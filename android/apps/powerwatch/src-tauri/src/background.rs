@@ -7,12 +7,22 @@ use powerwatch_storage::{NotificationRecord, PollState};
 #[serde(rename_all = "camelCase")]
 pub struct BackgroundStatus {
     notifications_allowed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reminder_status: Option<ReminderStatus>,
     preferences: NotificationPreferences,
     notifications: Vec<NotificationRecord>,
     polls: Vec<PollState>,
     platform: &'static str,
     platform_settings: PlatformSettings,
     last_error: Option<String>,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReminderStatus {
+    exact_allowed: bool,
+    exact_access_required: bool,
+    battery_saver: bool,
+    background_restricted: bool,
 }
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -42,14 +52,21 @@ pub fn open_background_settings(app: tauri::AppHandle) -> Result<(), CommandErro
     return android::open_background_settings(&app);
 }
 #[tauri::command(async)]
+pub fn open_exact_reminder_settings(app: tauri::AppHandle) -> Result<(), CommandError> {
+    #[cfg(target_os = "android")]
+    return android::open_exact_reminder_settings(&app);
+}
+#[tauri::command(async)]
 pub fn get_background_status(
     state: tauri::State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<BackgroundStatus, CommandError> {
     let allowed = android::notification_state(&app)?;
+    let reminder_status = Some(android::reminder_status(&app)?);
     let repository = state.repo()?;
     Ok(BackgroundStatus {
         notifications_allowed: allowed,
+        reminder_status,
         preferences: repository.store.notification_preferences()?,
         notifications: repository.store.notification_log()?,
         polls: repository.store.poll_states()?,

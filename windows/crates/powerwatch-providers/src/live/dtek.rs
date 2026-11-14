@@ -29,6 +29,56 @@ struct Session {
     streets: BTreeMap<String, Vec<String>>,
     loaded_at: DateTime<Utc>,
     reads: BTreeMap<(String, String), (Response, DateTime<Utc>)>,
+    forecast: ForecastCache,
+}
+#[derive(Default)]
+struct ForecastCache {
+    fact: Option<serde_json::Value>,
+    checked_at: Option<DateTime<Utc>>,
+    invalidated: bool,
+}
+impl ForecastCache {
+    fn revision_reply(
+        &mut self,
+        reply: &serde_json::Value,
+        checked: DateTime<Utc>,
+    ) -> Result<(), FetchError> {
+        let unchanged = reply.as_object().is_some_and(|object| object.len() == 1)
+            && reply["result"].as_bool() == Some(false)
+            && !self.revision().is_empty();
+        if unchanged {
+            self.checked_at = Some(checked);
+            return Ok(());
+        }
+        if reply["result"].as_bool() != Some(true) {
+            return Err(FetchError::InvalidData);
+        }
+        self.observe(reply, checked);
+        Ok(())
+    }
+    fn observe(&mut self, reply: &serde_json::Value, checked: DateTime<Utc>) {
+        if reply["showTableFact"].as_bool() == Some(false)
+            || reply["showCurSchedule"].as_bool() == Some(false)
+        {
+            self.fact = None;
+            self.invalidated = false;
+        } else if let Some(fact) = reply.get("fact").filter(|fact| !fact.is_null()) {
+            self.fact = Some(fact.clone());
+            self.invalidated = false;
+        }
+        if !self.invalidated {
+            self.checked_at = Some(checked);
+        }
+    }
+    fn revision(&self) -> &str {
+        if self.invalidated {
+            return "";
+        }
+        self.fact
+            .as_ref()
+            .and_then(|fact| fact["update"].as_str())
+            .unwrap_or("")
+    }
 }
 pub struct AddressReport {
     pub binding: ProviderAddressId,
@@ -126,9 +176,134 @@ fn parse_session(page: &[u8], now: DateTime<Utc>) -> Result<Session, FetchError>
         streets,
         loaded_at: now,
         reads: BTreeMap::new(),
+        forecast: ForecastCache {
+            fact: (!page.contains("DisconSchedule.showTableFact = false")
+                && !page.contains("DisconSchedule.showCurSchedule = false"))
+            .then(|| {
+                page.split_once("DisconSchedule.fact = ")
+                    .and_then(|(_, json)| {
+                        serde_json::Deserializer::from_str(json)
+                            .into_iter()
+                            .next()
+                            .and_then(Result::ok)
+                    })
+            })
+            .flatten(),
+            checked_at: Some(now),
+            invalidated: false,
+        },
     })
 }
 impl Dtek {
+    /// Reuse the fact returned with the address response. Queue-only polling
+    /// uses the same revision check as the official page, never a weekly preset.
+    pub fn forecast(
+        &self,
+        http: &HttpClient,
+        queue: &Queue,
+        now: DateTime<Utc>,
+    ) -> Result<super::SourceSchedule, FetchError> {
+        if queue.operator_id != OPERATOR {
+            return Err(FetchError::InvalidData);
+        }
+        let result = self.read_forecast(http, queue, now);
+        if matches!(result, Err(FetchError::InvalidData)) {
+            http.invalid_response("www.dtek-dnem.com.ua")?;
+        }
+        result
+    }
+    fn read_forecast(
+        &self,
+        http: &HttpClient,
+        queue: &Queue,
+        now: DateTime<Utc>,
+    ) -> Result<super::SourceSchedule, FetchError> {
+        let now = now.max(Utc::now());
+        let mut slot = self.session.lock().map_err(|_| FetchError::Network)?;
+        let session = Self::session(&mut slot, http, now)?;
+        if session.forecast.invalidated {
+            let page = http.dtek_request(None, None, now)?;
+            *session = parse_session(&page.body, page.checked_at)?;
+        }
+        let now = now.max(Utc::now());
+        if session.forecast.invalidated
+            || session
+                .forecast
+                .checked_at
+                .is_none_or(|at| now < at || now - at >= TimeDelta::seconds(60))
+        {
+            let form = [
+                ("method".into(), "checkDisconUpdate".into()),
+                ("update".into(), session.forecast.revision().into()),
+            ];
+            let response = match http.dtek_request(Some(&form), Some(&session.csrf), now) {
+                Ok(value) => value,
+                Err(error) => {
+                    if invalidates_session(&error) {
+                        *slot = None;
+                    }
+                    return Err(error);
+                }
+            };
+            let reply: serde_json::Value =
+                serde_json::from_slice(&response.body).map_err(|_| FetchError::InvalidData)?;
+            session
+                .forecast
+                .revision_reply(&reply, response.checked_at)?;
+        }
+        let checked = session.forecast.checked_at.ok_or(FetchError::InvalidData)?;
+        let (days, published) = if let Some(value) =
+            session.forecast.fact.as_ref().filter(|value| {
+                !value["data"].as_array().is_some_and(Vec::is_empty)
+                    && !value["data"]
+                        .as_object()
+                        .is_some_and(serde_json::Map::is_empty)
+            }) {
+            let fact =
+                serde_json::from_value(value.clone()).map_err(|_| FetchError::InvalidData)?;
+            let (days, publication, _) = super::dtek_fact::parse(&fact, queue, checked)?;
+            (days, Some(publication))
+        } else {
+            let today = checked.with_timezone(&LOCAL_ZONE).date_naive();
+            let tomorrow = today
+                .checked_add_days(chrono::Days::new(1))
+                .ok_or(FetchError::InvalidData)?;
+            (
+                [today, tomorrow]
+                    .into_iter()
+                    .map(|date| {
+                        powerwatch_core::model::normalize_day(date, &[])
+                            .map_err(|_| FetchError::InvalidData)
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+                None,
+            )
+        };
+        let mut proof = super::evidence(
+            OPERATOR,
+            "ДТЕК Дніпровські електромережі",
+            ProviderKind::Operator,
+            WEBSITE,
+            queue,
+            checked,
+            published,
+        );
+        proof.valid_until = Some(
+            powerwatch_core::time::local_instant(days[1].date, 1440)
+                .map_err(|_| FetchError::InvalidData)?,
+        );
+        proof.content_hash = session
+            .forecast
+            .fact
+            .as_ref()
+            .map(|fact| format!("{:x}", Sha256::digest(fact.to_string().as_bytes())));
+        Ok(super::SourceSchedule {
+            retained: false,
+            days,
+            evidence: proof,
+            emergency_dates: Vec::new(),
+        })
+    }
     pub(super) fn revalidate_observations(&self) -> Result<(), FetchError> {
         if let Some(session) = self
             .session
@@ -137,6 +312,7 @@ impl Dtek {
             .as_mut()
         {
             session.reads.clear();
+            session.forecast.invalidated = true;
         }
         Ok(())
     }
@@ -271,6 +447,8 @@ impl Dtek {
             ("data[0][value]".into(), city.clone()),
             ("data[1][name]".into(), "street".into()),
             ("data[1][value]".into(), street.clone()),
+            ("data[2][name]".into(), "updateFact".into()),
+            ("data[2][value]".into(), session.forecast.revision().into()),
         ];
         let response = match http.dtek_request(Some(&form), Some(&session.csrf), Utc::now()) {
             Ok(value) => value,
@@ -282,8 +460,17 @@ impl Dtek {
             }
         };
         let checked = response.checked_at;
+        let raw: serde_json::Value = match serde_json::from_slice(&response.body) {
+            Ok(raw) => raw,
+            Err(_) => {
+                *slot = None;
+                http.invalid_response("www.dtek-dnem.com.ua")?;
+                return Err(FetchError::InvalidData);
+            }
+        };
         match serde_json::from_slice::<Response>(&response.body) {
             Ok(response) if response.result => {
+                session.forecast.observe(&raw, checked);
                 if session.reads.len() >= 8
                     && !session.reads.contains_key(&key)
                     && let Some(oldest) = session

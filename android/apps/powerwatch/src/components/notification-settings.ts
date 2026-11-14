@@ -3,6 +3,7 @@ import { escapeHtml as html, formatMoment } from "../format";
 import {
   getBackgroundStatus,
   openBackgroundSettings,
+  openExactReminderSettings,
   setNotificationPreferences,
   setPlatformSettings,
   testNotification,
@@ -23,6 +24,15 @@ const minute = (value: FormDataEntryValue | null) => {
   const [h, m] = String(value).split(":").map(Number);
   return (h ?? NaN) * 60 + (m ?? NaN);
 };
+/** Update permission feedback without replacing unsaved notification choices. */
+export function updateReminderStatus(
+  container: HTMLElement,
+  status: BackgroundStatus["reminderStatus"],
+): void {
+  const target = container.querySelector<HTMLElement>("[data-reminder-status]");
+  if (!target || !status) return;
+  target.innerHTML = `<h4>${uk.exactReminders}</h4><p class="muted" role="status">${status.exactAllowed ? uk.exactRemindersAllowed : uk.exactRemindersDenied}</p>${status.exactAccessRequired ? `<button class="secondary-button" data-local="exact-reminders">${status.exactAllowed ? uk.exactRemindersManage : uk.exactRemindersAllow}</button>` : ""}${status.batterySaver || status.backgroundRestricted ? `<p class="muted">${uk.reminderBatteryRestricted}</p>` : ""}`;
+}
 /** Retained DOM keeps unfinished edits intact while the clock projects the UI. */
 export class NotificationSettingsForm {
   readonly element = document.createElement("section");
@@ -60,8 +70,9 @@ export class NotificationSettingsForm {
         "",
       )}</div></fieldset><fieldset aria-label="${uk.quietHours}">${check("quiet", uk.quietHours, prefs.quietHours !== null)}<p class="muted">${uk.quietHint}</p><fieldset class="time-window quiet-window" ${prefs.quietHours ? "" : "disabled"}><div><label for="quiet-from">${uk.workFrom}</label><input id="quiet-from" type="time" name="quiet-from" value="${time(prefs.quietHours?.startMinute ?? 1380)}" required></div><div><label for="quiet-until">${uk.workUntil}</label><input id="quiet-until" type="time" name="quiet-until" value="${time(prefs.quietHours?.endMinute ?? 420)}" required></div></fieldset></fieldset><div class="switch-group">${check("sound", uk.sound, prefs.sound)}${value.platform === "android" ? check("vibration", uk.vibration, prefs.vibration) : ""}</div><div class="save-footer"><button class="primary-button" type="submit">${uk.saveNotifications}</button><p class="result" role="status" hidden></p></div></form>
     ${value.platform === "windows" ? `<form class="platform-form settings-section"><h3>${uk.windowsSettings}</h3><div class="switch-group">${check("tray", uk.tray, value.platformSettings.tray)}${check("autostart", uk.autostart, value.platformSettings.autostart)}</div><div class="save-footer"><button class="primary-button" type="submit">${uk.savePlatform}</button><p class="result" role="status" hidden></p></div></form>` : ""}
-    ${value.platform === "android" ? `<section class="settings-section android-background"><h3>${uk.androidBackgroundSettings}</h3><p class="muted">${uk.androidBackgroundHelp}</p><button class="secondary-button" data-local="background-settings">${uk.androidBackgroundSettings}</button><p class="result" role="status" hidden></p></section>` : ""}
+    ${value.platform === "android" ? `<section class="settings-section android-background"><h3>${uk.androidBackgroundSettings}</h3><div data-reminder-status></div><p class="muted">${uk.androidBackgroundHelp}</p><button class="secondary-button" data-local="background-settings">${uk.androidBackgroundSettings}</button><p class="result" role="status" hidden></p></section>` : ""}
     <section class="settings-section notification-test"><h3>${uk.testSection}</h3><p class="muted">${uk.notificationLimits[value.platform]}</p><div class="button-row"><button class="secondary-button" data-local="test">${uk.testNotification}</button></div><p class="result" role="status" hidden></p></section>`;
+    updateReminderStatus(this.element, value.reminderStatus);
     const perform = async (
       section: HTMLElement,
       work: () => Promise<unknown>,
@@ -159,6 +170,12 @@ export class NotificationSettingsForm {
       )!;
       if (action === "test")
         void perform(section, testNotification, uk.notificationQueued);
+      if (action === "exact-reminders")
+        void perform(
+          section,
+          openExactReminderSettings,
+          uk.systemSettingsOpened,
+        );
       if (action === "background-settings")
         void perform(section, openBackgroundSettings, uk.systemSettingsOpened);
     });
