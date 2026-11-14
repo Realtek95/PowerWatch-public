@@ -1,0 +1,17 @@
+[package]
+name = "powerwatch-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+powerwatch-core.workspace = true
+powerwatch-storage.workspace = true
+powerwatch-providers.workspace = true
+powerwatch-notifications.workspace = true
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+

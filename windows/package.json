@@ -1,0 +1,16 @@
+{
+  "name": "powerwatch-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=24.22.1 <25"
+  },
+  "scripts": {
+    "dev": "pnpm --dir apps/powerwatch dev",
+    "build": "pnpm --dir apps/powerwatch build",
+    "typecheck": "pnpm --dir apps/powerwatch typecheck",
+    "tauri": "pnpm --dir apps/powerwatch tauri"
+  }
+}

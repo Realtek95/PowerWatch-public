@@ -1,0 +1,1 @@
+{"main-window":{"identifier":"main-window","description":"Local main window with no filesystem, HTTP or shell access from the UI","local":true,"windows":["main"],"permissions":["core:default"]}}

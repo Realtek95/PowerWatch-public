@@ -1,0 +1,3 @@
+packages:
+  - apps/powerwatch
+storeDir: .cache/pnpm

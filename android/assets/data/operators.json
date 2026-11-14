@@ -1,0 +1,336 @@
+[
+  {
+    "operator": {
+      "id": "ua.dso.cek-dnipro",
+      "name": "Центральна енергетична компанія (ЦЕК), Дніпропетровщина",
+      "oblastIds": [
+        "UA12000000000090473"
+      ]
+    },
+    "svitlopulseId": "cek-dnipro",
+    "oblastSlug": "dnipropetrovsk-oblast",
+    "yasno": {
+      "region": 3,
+      "dso": 303
+    },
+    "mirrorRegion": null
+  },
+  {
+    "operator": {
+      "id": "ua.dso.cherkasyoblenergo",
+      "name": "Черкасиобленерго",
+      "oblastIds": [
+        "UA71000000000010357"
+      ]
+    },
+    "svitlopulseId": "cherkasyoblenergo",
+    "oblastSlug": "cherkasy-oblast",
+    "yasno": null,
+    "mirrorRegion": null
+  },
+  {
+    "operator": {
+      "id": "ua.dso.chernihivoblenergo",
+      "name": "Чернігівобленерго",
+      "oblastIds": [
+        "UA74000000000025378"
+      ]
+    },
+    "svitlopulseId": "chernihivoblenergo",
+    "oblastSlug": "chernihiv-oblast",
+    "yasno": null,
+    "mirrorRegion": null
+  },
+  {
+    "operator": {
+      "id": "ua.dso.chernivtsioblenergo",
+      "name": "Чернівціобленерго",
+      "oblastIds": [
+        "UA73000000000044923"
+      ]
+    },
+    "svitlopulseId": "chernivtsioblenergo",
+    "oblastSlug": "chernivtsi-oblast",
+    "yasno": null,
+    "mirrorRegion": null
+  },
+  {
+    "operator": {
+      "id": "ua.dso.dtek-dem",
+      "name": "ДТЕК Донецькі електромережі",
+      "oblastIds": [
+        "UA14000000000091971"
+      ]
+    },
+    "svitlopulseId": "dtek-dem",
+    "oblastSlug": "donetsk-oblast",
+    "yasno": null,
+    "mirrorRegion": null
+  },
+  {
+    "operator": {
+      "id": "ua.dso.dtek-dnem",
+      "name": "ДТЕК Дніпровські електромережі",
+      "oblastIds": [
+        "UA12000000000090473"
+      ]
+    },
+    "svitlopulseId": "dtek-dnem",
+    "oblastSlug": "dnipropetrovsk-oblast",
+    "yasno": {
+      "region": 3,
+      "dso": 301
+    },
+    "mirrorRegion": "dnipro"
+  },
+  {
+    "operator": {
+      "id": "ua.dso.dtek-kem",
+      "name": "ДТЕК Київські електромережі",
+      "oblastIds": [
+        "UA80000000000093317"
+      ]
+    },
+    "svitlopulseId": "dtek-kem",
+    "oblastSlug": "kyiv-city",
+    "yasno": {
+      "region": 25,
+      "dso": 902
+    },
+    "mirrorRegion": "kyiv"
+  },
+  {
+    "operator": {
+      "id": "ua.dso.dtek-krem",
+      "name": "ДТЕК Київські регіональні електромережі",
+      "oblastIds": [
+        "UA32000000000030281"
+      ]
+    },
+    "svitlopulseId": "dtek-krem",
+    "oblastSlug": "kyiv-oblast",
+    "yasno": null,
+    "mirrorRegion": "kyiv-region"
+  },
+  {
+    "operator": {
+      "id": "ua.dso.dtek-oem",
+      "name": "ДТЕК Одеські електромережі",
+      "oblastIds": [
+        "UA51000000000030770"
+      ]
+    },
+    "svitlopulseId": "dtek-oem",
+    "oblastSlug": "odesa-oblast",
+    "yasno": null,
+    "mirrorRegion": "odesa"
+  },
+  {
+    "operator": {
+      "id": "ua.dso.kharkivoblenergo",
+      "name": "Харківобленерго",
+      "oblastIds": [
+        "UA63000000000041885"
+      ]
+    },
+    "svitlopulseId": "kharkivoblenergo",
+    "oblastSlug": "kharkiv-oblast",
+    "yasno": null,
+    "mirrorRegion": null
+  },
+  {
+    "operator": {
+      "id": "ua.dso.khersonoblenergo",
+      "name": "Херсонобленерго",
+      "oblastIds": [
+        "UA65000000000030969"
+      ]
+    },
+    "svitlopulseId": "khersonoblenergo",
+    "oblastSlug": "kherson-oblast",
+    "yasno": null,
+    "mirrorRegion": null
+  },
+  {
+    "operator": {
+      "id": "ua.dso.khmelnytskoblenergo",
+      "name": "Хмельницькобленерго",
+      "oblastIds": [
+        "UA68000000000099709"
+      ]
+    },
+    "svitlopulseId": "khmelnytskoblenergo",
+    "oblastSlug": "khmelnytskyi-oblast",
+    "yasno": null,
+    "mirrorRegion": null
+  },
+  {
+    "operator": {
+      "id": "ua.dso.kirovohradoblenergo",
+      "name": "Кіровоградобленерго",
+      "oblastIds": [
+        "UA35000000000016081"
+      ]
+    },
+    "svitlopulseId": "kirovohradoblenergo",
+    "oblastSlug": "kirovohrad-oblast",
+    "yasno": null,
+    "mirrorRegion": null
+  },
+  {
+    "operator": {
+      "id": "ua.dso.lvivoblenergo",
+      "name": "Львівобленерго",
+      "oblastIds": [
+        "UA46000000000026241"
+      ]
+    },
+    "svitlopulseId": "lvivoblenergo",
+    "oblastSlug": "lviv-oblast",
+    "yasno": null,
+    "mirrorRegion": null
+  },
+  {
+    "operator": {
+      "id": "ua.dso.mykolaivoblenergo",
+      "name": "Миколаївобленерго",
+      "oblastIds": [
+        "UA48000000000039575"
+      ]
+    },
+    "svitlopulseId": "mykolaivoblenergo",
+    "oblastSlug": "mykolaiv-oblast",
+    "yasno": null,
+    "mirrorRegion": null
+  },
+  {
+    "operator": {
+      "id": "ua.dso.poltavaoblenergo",
+      "name": "Полтаваобленерго",
+      "oblastIds": [
+        "UA53000000000028050"
+      ]
+    },
+    "svitlopulseId": "poltavaoblenergo",
+    "oblastSlug": "poltava-oblast",
+    "yasno": null,
+    "mirrorRegion": null
+  },
+  {
+    "operator": {
+      "id": "ua.dso.prykarpattiaoblenergo",
+      "name": "Прикарпаттяобленерго",
+      "oblastIds": [
+        "UA26000000000069363"
+      ]
+    },
+    "svitlopulseId": "prykarpattiaoblenergo",
+    "oblastSlug": "ivano-frankivsk-oblast",
+    "yasno": null,
+    "mirrorRegion": null
+  },
+  {
+    "operator": {
+      "id": "ua.dso.rivneoblenergo",
+      "name": "Рівнеобленерго",
+      "oblastIds": [
+        "UA56000000000066151"
+      ]
+    },
+    "svitlopulseId": "rivneoblenergo",
+    "oblastSlug": "rivne-oblast",
+    "yasno": null,
+    "mirrorRegion": null
+  },
+  {
+    "operator": {
+      "id": "ua.dso.sumyoblenergo",
+      "name": "Сумиобленерго",
+      "oblastIds": [
+        "UA59000000000057109"
+      ]
+    },
+    "svitlopulseId": "sumyoblenergo",
+    "oblastSlug": "sumy-oblast",
+    "yasno": null,
+    "mirrorRegion": null
+  },
+  {
+    "operator": {
+      "id": "ua.dso.ternopiloblenergo",
+      "name": "Тернопільобленерго",
+      "oblastIds": [
+        "UA61000000000060328"
+      ]
+    },
+    "svitlopulseId": "ternopiloblenergo",
+    "oblastSlug": "ternopil-oblast",
+    "yasno": null,
+    "mirrorRegion": null
+  },
+  {
+    "operator": {
+      "id": "ua.dso.vinnytsiaoblenergo",
+      "name": "Вінницяобленерго",
+      "oblastIds": [
+        "UA05000000000010236"
+      ]
+    },
+    "svitlopulseId": "vinnytsiaoblenergo",
+    "oblastSlug": "vinnytsia-oblast",
+    "yasno": null,
+    "mirrorRegion": null
+  },
+  {
+    "operator": {
+      "id": "ua.dso.volynoblenergo",
+      "name": "Волиньобленерго",
+      "oblastIds": [
+        "UA07000000000024379"
+      ]
+    },
+    "svitlopulseId": "volynoblenergo",
+    "oblastSlug": "volyn-oblast",
+    "yasno": null,
+    "mirrorRegion": null
+  },
+  {
+    "operator": {
+      "id": "ua.dso.zakarpattiaoblenergo",
+      "name": "Закарпаттяобленерго",
+      "oblastIds": [
+        "UA21000000000011690"
+      ]
+    },
+    "svitlopulseId": "zakarpattiaoblenergo",
+    "oblastSlug": "zakarpattia-oblast",
+    "yasno": null,
+    "mirrorRegion": null
+  },
+  {
+    "operator": {
+      "id": "ua.dso.zaporizhzhiaoblenergo",
+      "name": "Запоріжжяобленерго",
+      "oblastIds": [
+        "UA23000000000064947"
+      ]
+    },
+    "svitlopulseId": "zaporizhzhiaoblenergo",
+    "oblastSlug": "zaporizhzhia-oblast",
+    "yasno": null,
+    "mirrorRegion": null
+  },
+  {
+    "operator": {
+      "id": "ua.dso.zhytomyroblenergo",
+      "name": "Житомиробленерго",
+      "oblastIds": [
+        "UA18000000000041385"
+      ]
+    },
+    "svitlopulseId": "zhytomyroblenergo",
+    "oblastSlug": "zhytomyr-oblast",
+    "yasno": null,
+    "mirrorRegion": null
+  }
+]

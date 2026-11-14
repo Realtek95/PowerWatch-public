@@ -1,0 +1,407 @@
+[
+  {
+    "schema": 1,
+    "oblastId": "UA01000000000013043",
+    "name": "Автономна Республіка Крим",
+    "sha256": "c778c565e81ae248438fa8e40340c4bcfe825ec03f79a9abac84eee9e97aacb3",
+    "bytes": 13615104,
+    "compressedBytes": 3113495,
+    "counts": {
+      "settlements": 1050,
+      "streets": 13581,
+      "houses": 34098
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA05000000000010236",
+    "name": "Вінницька",
+    "sha256": "478cff43ff85f1eb0ba3e5515ff89598abfdf83c072248053950729bce4caf99",
+    "bytes": 21794816,
+    "compressedBytes": 4674802,
+    "counts": {
+      "settlements": 1502,
+      "streets": 19940,
+      "houses": 38195
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA07000000000024379",
+    "name": "Волинська",
+    "sha256": "576ca8897d5f5e00b9837eb4ea33d7d90326bcb44e664ec76ecbe537c270dd9e",
+    "bytes": 9060352,
+    "compressedBytes": 2017438,
+    "counts": {
+      "settlements": 1087,
+      "streets": 10763,
+      "houses": 13296
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA12000000000090473",
+    "name": "Дніпропетровська",
+    "sha256": "8c83c7cee46c427e1b3b659b4473ccce19cd6db231860c8d565161ee130e311e",
+    "bytes": 37847040,
+    "compressedBytes": 8524209,
+    "counts": {
+      "settlements": 1500,
+      "streets": 16479,
+      "houses": 167476
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA14000000000091971",
+    "name": "Донецька",
+    "sha256": "47529641ead056f870a248ae72d428c8a1df76943812fc4bbdf4737cfec0cd3b",
+    "bytes": 73297920,
+    "compressedBytes": 15576910,
+    "counts": {
+      "settlements": 1298,
+      "streets": 27158,
+      "houses": 273170
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA18000000000041385",
+    "name": "Житомирська",
+    "sha256": "4a7ea18b51cb98c2e4503a2e81031d1b390963f664b4e661b7e2ee66a006d59f",
+    "bytes": 14663680,
+    "compressedBytes": 3235558,
+    "counts": {
+      "settlements": 1668,
+      "streets": 14388,
+      "houses": 24602
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA21000000000011690",
+    "name": "Закарпатська",
+    "sha256": "0ec4e1334e528683c8039544dca00c951f6db510d081e99a582c922548f05f43",
+    "bytes": 19066880,
+    "compressedBytes": 4113556,
+    "counts": {
+      "settlements": 604,
+      "streets": 10972,
+      "houses": 52479
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA23000000000064947",
+    "name": "Запорізька",
+    "sha256": "b010a983906f6933611366e41329de750a5eab0ddc8f34c542580c7a3414dc9e",
+    "bytes": 12996608,
+    "compressedBytes": 2925646,
+    "counts": {
+      "settlements": 950,
+      "streets": 7660,
+      "houses": 50493
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA26000000000069363",
+    "name": "Івано-Франківська",
+    "sha256": "7a431ea7442d11b58bf31442f2335d7e2014227c41b0892436cb894ee9ba50f9",
+    "bytes": 15421440,
+    "compressedBytes": 3410753,
+    "counts": {
+      "settlements": 805,
+      "streets": 15482,
+      "houses": 23753
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA32000000000030281",
+    "name": "Київська",
+    "sha256": "b69c05d1ba5b3841bc78f871103f16f0b9847721c7758ef5b7ea647513330f7e",
+    "bytes": 32587776,
+    "compressedBytes": 7222392,
+    "counts": {
+      "settlements": 1182,
+      "streets": 29007,
+      "houses": 66140
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA35000000000016081",
+    "name": "Кіровоградська",
+    "sha256": "52ccfd0d7230489c9f1dcbff2c55b3e327aa89beba7c6b5f7e98ee3723744047",
+    "bytes": 10928128,
+    "compressedBytes": 2444047,
+    "counts": {
+      "settlements": 1027,
+      "streets": 9157,
+      "houses": 29776
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA44000000000018893",
+    "name": "Луганська",
+    "sha256": "9002ebb12f41b4c66dbd06ab4bf1fb0d240da1045b9637bdc9a597dad7866a23",
+    "bytes": 31346688,
+    "compressedBytes": 6703102,
+    "counts": {
+      "settlements": 926,
+      "streets": 16251,
+      "houses": 115467
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA46000000000026241",
+    "name": "Львівська",
+    "sha256": "e2e8dd33abdf58ce88533f9bf304fb583b8b851a66ef87863af2faa816e0794d",
+    "bytes": 33787904,
+    "compressedBytes": 7396441,
+    "counts": {
+      "settlements": 1928,
+      "streets": 26128,
+      "houses": 73020
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA48000000000039575",
+    "name": "Миколаївська",
+    "sha256": "a2c29c9e767cf4bea46b289f16074310c7ed1a0706918cc7fc452b095a4bdd54",
+    "bytes": 12357632,
+    "compressedBytes": 2790817,
+    "counts": {
+      "settlements": 911,
+      "streets": 7454,
+      "houses": 45539
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA51000000000030770",
+    "name": "Одеська",
+    "sha256": "28c1ff2f6aac825107372ea0e0a5f674d4f8dbae94de3d66602806e61fe21c77",
+    "bytes": 17805312,
+    "compressedBytes": 3974161,
+    "counts": {
+      "settlements": 1174,
+      "streets": 14916,
+      "houses": 49646
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA53000000000028050",
+    "name": "Полтавська",
+    "sha256": "1ca32338822c2fcb1b108a43aa4e0a5baa9d09828184204d1502c5f0adfae0ae",
+    "bytes": 19222528,
+    "compressedBytes": 4311960,
+    "counts": {
+      "settlements": 1839,
+      "streets": 17363,
+      "houses": 43960
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA56000000000066151",
+    "name": "Рівненська",
+    "sha256": "79870bf0efe365e78cf1bfd8bb9b422985c9e3840cae9fc07a6fd44771f48806",
+    "bytes": 9400320,
+    "compressedBytes": 2100386,
+    "counts": {
+      "settlements": 1026,
+      "streets": 11536,
+      "houses": 13267
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA59000000000057109",
+    "name": "Сумська",
+    "sha256": "d6e18823f32749fe0114618eb68d0a582fb821173f6292756be6520599625994",
+    "bytes": 11354112,
+    "compressedBytes": 2558117,
+    "counts": {
+      "settlements": 1488,
+      "streets": 11043,
+      "houses": 23173
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA61000000000060328",
+    "name": "Тернопільська",
+    "sha256": "77d4bb4c81e33f3b478df6c29033e404297dbd3c8af5766d4748bb4404330da8",
+    "bytes": 13959168,
+    "compressedBytes": 3025761,
+    "counts": {
+      "settlements": 1058,
+      "streets": 12224,
+      "houses": 23222
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA63000000000041885",
+    "name": "Харківська",
+    "sha256": "1555f558db6bf7b18d6e576f79c6b4e0eb1d2a3cf7c2e9025192c5fc823f1a73",
+    "bytes": 35024896,
+    "compressedBytes": 7711134,
+    "counts": {
+      "settlements": 1751,
+      "streets": 22195,
+      "houses": 94477
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA65000000000030969",
+    "name": "Херсонська",
+    "sha256": "669a4e31940d64672c43603a8c0c5b2997a8651a3dcb357c5f9f8ba94974a487",
+    "bytes": 8491008,
+    "compressedBytes": 1903534,
+    "counts": {
+      "settlements": 696,
+      "streets": 6704,
+      "houses": 25858
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA68000000000099709",
+    "name": "Хмельницька",
+    "sha256": "be63a651b510be1fd86b461b5ba73ff72e92426f3f7740f01364e0b3ffbed0b8",
+    "bytes": 20140032,
+    "compressedBytes": 4337132,
+    "counts": {
+      "settlements": 1451,
+      "streets": 17362,
+      "houses": 39240
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA71000000000010357",
+    "name": "Черкаська",
+    "sha256": "7f35fb6903b14d8792bf75570d48c9278e1101e2c1b68fa778ef65a192348aac",
+    "bytes": 13148160,
+    "compressedBytes": 2887823,
+    "counts": {
+      "settlements": 854,
+      "streets": 13243,
+      "houses": 21196
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA73000000000044923",
+    "name": "Чернівецька",
+    "sha256": "b99f3c074ae35f718d927f2a64a2ee6b5cd5acb413eec097f69a78c3d8d3baf6",
+    "bytes": 13475840,
+    "compressedBytes": 2964887,
+    "counts": {
+      "settlements": 417,
+      "streets": 13410,
+      "houses": 28637
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA74000000000025378",
+    "name": "Чернігівська",
+    "sha256": "89dfac0dea1533669704447afeda33a3731e0d5967a6612de427212c44387d13",
+    "bytes": 12251136,
+    "compressedBytes": 2696459,
+    "counts": {
+      "settlements": 1509,
+      "streets": 12853,
+      "houses": 22534
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA80000000000093317",
+    "name": "Київ",
+    "sha256": "1c012d1788970207452df6719e2f81e84bf69a3d7d68ddf3e79b7b11c212f3a1",
+    "bytes": 17149952,
+    "compressedBytes": 3863155,
+    "counts": {
+      "settlements": 1,
+      "streets": 4229,
+      "houses": 58240
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  },
+  {
+    "schema": 1,
+    "oblastId": "UA85000000000065278",
+    "name": "Севастополь",
+    "sha256": "835961daf6eeca07a38d7f0d89a8abe8b18fe50b731c108467586ea16f3c2090",
+    "bytes": 4648960,
+    "compressedBytes": 1060139,
+    "counts": {
+      "settlements": 1,
+      "streets": 1912,
+      "houses": 21643
+    },
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors; КАТОТТГ; НАІС; ЦВК"
+  }
+]

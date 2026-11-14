@@ -1,0 +1,32 @@
+<resources>
+    <string name="widget_name">PowerWatch · Великий</string>
+    <string name="widget_brand">PowerWatch</string>
+    <string name="widget_description">Графік, подія й час останньої перевірки. Натисніть, щоб відкрити застосунок.</string>
+    <string name="widget_choose_address">Оберіть адресу в застосунку</string>
+    <string name="widget_no_data">Немає даних графіка</string>
+    <string name="widget_no_event">Найближчу подію не визначено</string>
+    <string name="widget_physical_unknown">Фактичне живлення не вимірюється</string>
+    <string name="widget_never">Успішних перевірок ще немає</string>
+    <string name="widget_age_format">Давність: %s</string>
+    <string name="notification_channel">Локальні нагадування</string>
+    <string name="app_name">"PowerWatch"</string>
+    <string name="main_activity_title">"PowerWatch"</string>
+    <string name="widget_available">Світло є за графіком</string>
+    <string name="widget_outage">Світла немає за графіком</string>
+    <string name="widget_switching">Можливе перемикання</string>
+    <string name="widget_stale">Застарілий графік</string>
+    <string name="widget_queue">Черга: %1$s</string>
+    <string name="widget_projection_time">Графік на %1$s</string>
+    <string name="widget_schedule">Графік відключень</string>
+    <string name="widget_refresh">Оновити графік</string>
+    <string name="widget_settings">Налаштування PowerWatch</string>
+    <string name="widget_medium_name">PowerWatch · Середній</string>
+    <string name="widget_small_name">PowerWatch · Малий</string>
+    <string name="widget_available_short">Світло є</string>
+    <string name="widget_outage_short">Світла немає</string>
+    <string name="widget_unknown_short">Немає даних</string>
+    <string name="widget_stale_short">Застаріло</string>
+    <string name="widget_refreshing">Оновлюємо…</string>
+    <string name="widget_chart_name">PowerWatch · Почасовий графік</string>
+    <string name="widget_chart_description">Почасовий графік для вибраної адреси. Оновлення й налаштування.</string>
+</resources>

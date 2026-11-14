@@ -1,0 +1,12 @@
+{
+  "publisher": "Міністерство розвитку громад та територій України",
+  "title": "Кодифікатор адміністративно-територіальних одиниць та територій територіальних громад",
+  "edition": "2026-07-07",
+  "retrievedAt": "2026-11-12",
+  "page": "https://mininfra.gov.ua/diialnist/rozvytok-mistsevoho-samovriaduvannia/kodyfikator-administratyvno-terytorialnykh-odynyts-ta-terytorii-terytorialnykh-hromad",
+  "download": "https://mininfra.gov.ua/storage/app/sites/1/uploaded-files/kodifikator-07-07.xlsx",
+  "sourceSha256": "5c5317759b2b90208e9b00338bc3db3c5e694272a166acf73f1543b3e18ecbea",
+  "oblastCount": 27,
+  "settlementCount": 29703,
+  "scope": "Офіційні назви та коди територій. Не містить вулиць, будинків, операторів, груп чи підтвердження покриття графіками."
+}

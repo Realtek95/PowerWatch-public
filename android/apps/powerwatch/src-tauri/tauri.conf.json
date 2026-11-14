@@ -1,0 +1,57 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "PowerWatch",
+  "version": "1.0.0",
+  "identifier": "ua.powerwatch.app",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "PowerWatch",
+        "width": 540,
+        "height": 960,
+        "minWidth": 360,
+        "minHeight": 640
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data:; style-src 'self' 'unsafe-inline'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "targets": ["nsis"],
+    "shortDescription": "Локальний моніторинг графіків електропостачання",
+    "android": {
+      "minSdkVersion": 28,
+      "versionCode": 1000000
+    },
+    "windows": {
+      "nsis": {
+        "languages": ["Ukrainian"],
+        "displayLanguageSelector": false,
+        "installMode": "currentUser"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI2MkZCNDg4ODE2MENCQUYKUldTdnkyQ0JpTFF2dG9ISTI0cTNlcmdDbDNWVUFPMDZRNm56M1VsTkJKRFdzN2oyWElpYnlsTWYK",
+      "endpoints": [
+        "https://github.com/Realtek95/PowerWatch-public/releases/latest/download/latest.json"
+      ],
+      "requireSignedVersion": true
+    }
+  }
+}

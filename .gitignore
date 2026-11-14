@@ -1,0 +1,15 @@
+*.log
+*.apk
+*.exe
+*.p12
+*.jks
+*.keystore
+*.pfx
+*.key
+*.pem
+.env
+.env.*
+/.cache/
+/artifacts/
+/PowerWatch-address-catalog.zip
+/PowerWatch-*-source.zip

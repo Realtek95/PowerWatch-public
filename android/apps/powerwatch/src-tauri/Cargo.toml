@@ -1,0 +1,32 @@
+[package]
+name = "powerwatch-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "powerwatch_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+serde_json.workspace = true
+
+[dependencies]
+tauri-plugin-opener = "=2.7.3"
+tauri = { version = "2", features = [] }
+chrono.workspace = true
+serde.workspace = true
+powerwatch-core.workspace = true
+powerwatch-addresses.workspace = true
+powerwatch-providers.workspace = true
+powerwatch-storage.workspace = true
+powerwatch-notifications.workspace = true
+powerwatch-runtime.workspace = true
+powerwatch-updates.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21.1"
+

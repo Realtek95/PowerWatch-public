@@ -1,0 +1,14 @@
+/target/
+/node_modules/
+**/node_modules/
+**/dist/
+/.cache/
+/assets/data/address-catalog/
+**/.gradle/
+**/.kotlin/
+**/build/
+**/local.properties
+**/jniLibs/
+**/tauri.settings.gradle
+**/tauri.build.gradle.kts
+**/tauri.properties
