@@ -23,6 +23,26 @@ pub struct PollState {
     pub error_code: Option<String>,
 }
 impl Store {
+    pub fn notification_reference(
+        &self,
+        key: &str,
+    ) -> Result<Option<powerwatch_notifications::ForecastReference>> {
+        let json: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT baseline_json FROM notification_baselines WHERE address_key=?1",
+                [key],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(json) = json {
+            return Ok(Some(decode(&json)?));
+        }
+        Ok(self
+            .cached(key)?
+            .as_ref()
+            .map(powerwatch_notifications::ForecastReference::from_snapshot))
+    }
     pub fn notification_preferences(&self) -> Result<NotificationPreferences> {
         Ok(self
             .setting("notification_preferences")?
@@ -32,7 +52,7 @@ impl Store {
         let rows: Vec<(i64, String, String, String)> = self
             .conn
             .prepare(
-                "SELECT id,payload_json,state,updated_at FROM notification_journal ORDER BY updated_at DESC,id DESC LIMIT 25",
+                "SELECT id,payload_json,state,updated_at FROM notification_journal WHERE state NOT IN ('planned','cancelled') ORDER BY updated_at DESC,id DESC LIMIT 25",
             )?
             .query_map(
                 [],

@@ -219,12 +219,17 @@ object WidgetCanvas {
                 }
                 if (!stale && band?.isNull("nowPosition") == false) {
                     val y = top + bandHeight * band.optDouble("nowPosition").toFloat()
-                    paint.color = green
+                    val cursor = color("#27883d", "#b3e7c1")
+                    val end = barX + barW - 3f
+                    paint.color = cursor
                     paint.strokeWidth = 1.2f
-                    canvas.drawLine(barX, y, barX + barW, y, paint)
-                    val badgeY = (y - 15f).coerceIn(top, top + bandHeight - 14f)
-                    box(barX + barW - 31f, badgeY, 31f, 14f, green, 4f)
-                    text(value?.optString("displayTime") ?: "", barX + barW - 28f, badgeY + 10f, 7f, Color.WHITE, max = 29f)
+                    canvas.drawLine(barX, y, end, y, paint)
+                    paint.color = surface
+                    canvas.drawCircle(end, y, 3f, paint)
+                    paint.color = cursor
+                    paint.style = Paint.Style.STROKE
+                    canvas.drawCircle(end, y, 3f, paint)
+                    paint.style = Paint.Style.FILL
                 }
             }
         }
@@ -260,7 +265,7 @@ object WidgetCanvas {
 
         private fun bolt(x: Float, y: Float, size: Float, round: Boolean = false) {
             box(x, y, size, size, Color.rgb(38, 183, 43), size * if (round) .5f else .27f)
-            context.getDrawable(R.drawable.ic_notification)?.apply {
+            context.getDrawable(R.drawable.ic_notification)?.mutate()?.apply {
                 setBounds((x + size * .18f).toInt(), (y + size * .15f).toInt(), (x + size * .82f).toInt(), (y + size * .85f).toInt())
                 setTint(Color.WHITE)
                 draw(canvas)

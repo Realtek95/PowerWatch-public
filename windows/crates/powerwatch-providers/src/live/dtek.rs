@@ -38,24 +38,6 @@ struct ForecastCache {
     invalidated: bool,
 }
 impl ForecastCache {
-    fn revision_reply(
-        &mut self,
-        reply: &serde_json::Value,
-        checked: DateTime<Utc>,
-    ) -> Result<(), FetchError> {
-        let unchanged = reply.as_object().is_some_and(|object| object.len() == 1)
-            && reply["result"].as_bool() == Some(false)
-            && !self.revision().is_empty();
-        if unchanged {
-            self.checked_at = Some(checked);
-            return Ok(());
-        }
-        if reply["result"].as_bool() != Some(true) {
-            return Err(FetchError::InvalidData);
-        }
-        self.observe(reply, checked);
-        Ok(())
-    }
     fn observe(&mut self, reply: &serde_json::Value, checked: DateTime<Utc>) {
         if reply["showTableFact"].as_bool() == Some(false)
             || reply["showCurSchedule"].as_bool() == Some(false)
@@ -66,18 +48,12 @@ impl ForecastCache {
             self.fact = Some(fact.clone());
             self.invalidated = false;
         }
-        if !self.invalidated {
+        if reply.get("fact").is_some_and(|fact| !fact.is_null())
+            || reply["showTableFact"].as_bool() == Some(false)
+            || reply["showCurSchedule"].as_bool() == Some(false)
+        {
             self.checked_at = Some(checked);
         }
-    }
-    fn revision(&self) -> &str {
-        if self.invalidated {
-            return "";
-        }
-        self.fact
-            .as_ref()
-            .and_then(|fact| fact["update"].as_str())
-            .unwrap_or("")
     }
 }
 pub struct AddressReport {
@@ -196,7 +172,7 @@ fn parse_session(page: &[u8], now: DateTime<Utc>) -> Result<Session, FetchError>
 }
 impl Dtek {
     /// Reuse the fact returned with the address response. Queue-only polling
-    /// uses the same revision check as the official page, never a weekly preset.
+    /// inspects the full dated plan, never a weekly preset or revision alone.
     pub fn forecast(
         &self,
         http: &HttpClient,
@@ -221,35 +197,16 @@ impl Dtek {
         let now = now.max(Utc::now());
         let mut slot = self.session.lock().map_err(|_| FetchError::Network)?;
         let session = Self::session(&mut slot, http, now)?;
-        if session.forecast.invalidated {
-            let page = http.dtek_request(None, None, now)?;
-            *session = parse_session(&page.body, page.checked_at)?;
-        }
-        let now = now.max(Utc::now());
         if session.forecast.invalidated
             || session
                 .forecast
                 .checked_at
                 .is_none_or(|at| now < at || now - at >= TimeDelta::seconds(60))
         {
-            let form = [
-                ("method".into(), "checkDisconUpdate".into()),
-                ("update".into(), session.forecast.revision().into()),
-            ];
-            let response = match http.dtek_request(Some(&form), Some(&session.csrf), now) {
-                Ok(value) => value,
-                Err(error) => {
-                    if invalidates_session(&error) {
-                        *slot = None;
-                    }
-                    return Err(error);
-                }
-            };
-            let reply: serde_json::Value =
-                serde_json::from_slice(&response.body).map_err(|_| FetchError::InvalidData)?;
-            session
-                .forecast
-                .revision_reply(&reply, response.checked_at)?;
+            let page = http.dtek_request(None, None, now)?;
+            let mut refreshed = parse_session(&page.body, page.checked_at)?;
+            refreshed.reads = std::mem::take(&mut session.reads);
+            *session = refreshed;
         }
         let checked = session.forecast.checked_at.ok_or(FetchError::InvalidData)?;
         let (days, published) = if let Some(value) =
@@ -448,7 +405,7 @@ impl Dtek {
             ("data[1][name]".into(), "street".into()),
             ("data[1][value]".into(), street.clone()),
             ("data[2][name]".into(), "updateFact".into()),
-            ("data[2][value]".into(), session.forecast.revision().into()),
+            ("data[2][value]".into(), String::new()),
         ];
         let response = match http.dtek_request(Some(&form), Some(&session.csrf), Utc::now()) {
             Ok(value) => value,

@@ -8,21 +8,10 @@ CREATE TABLE IF NOT EXISTS schedule_intervals (address_key TEXT NOT NULL REFEREN
 CREATE TABLE IF NOT EXISTS schedule_changes (id INTEGER PRIMARY KEY, address_key TEXT NOT NULL REFERENCES addresses(key) ON DELETE CASCADE, detected_at TEXT NOT NULL, published_at TEXT, changes_json TEXT NOT NULL, before_json TEXT NOT NULL, after_json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS daily_schedule_archive (address_key TEXT NOT NULL REFERENCES addresses(key) ON DELETE CASCADE, date TEXT NOT NULL, archive_json TEXT NOT NULL, PRIMARY KEY(address_key,date));
 CREATE INDEX IF NOT EXISTS changes_address_time ON schedule_changes(address_key,detected_at);
-PRAGMA user_version = 1;
+PRAGMA user_version = 2;
 CREATE TABLE notifications (id INTEGER PRIMARY KEY, key TEXT NOT NULL UNIQUE, address_key TEXT NOT NULL REFERENCES addresses(key) ON DELETE CASCADE, planned_at TEXT NOT NULL, payload_json TEXT NOT NULL, state TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE TABLE events (id INTEGER PRIMARY KEY, notification_id INTEGER NOT NULL REFERENCES notifications(id) ON DELETE CASCADE, state TEXT NOT NULL, at TEXT NOT NULL);
 CREATE TABLE poll_state (address_key TEXT PRIMARY KEY REFERENCES addresses(key) ON DELETE CASCADE, due_at TEXT NOT NULL, failures INTEGER NOT NULL DEFAULT 0, last_attempt TEXT, last_success TEXT, error_code TEXT);
 CREATE INDEX notifications_due ON notifications(state,planned_at);
 -- Visible history is deliberately independent of active plans and dedup keys.
 CREATE TABLE notification_journal (id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL UNIQUE, address_key TEXT NOT NULL, payload_json TEXT NOT NULL, state TEXT NOT NULL, updated_at TEXT NOT NULL);
-CREATE TRIGGER notification_journal_insert AFTER INSERT ON notifications BEGIN
-  INSERT INTO notification_journal(key,address_key,payload_json,state,updated_at) VALUES(NEW.key,NEW.address_key,NEW.payload_json,NEW.state,NEW.updated_at)
-    ON CONFLICT(key) DO UPDATE SET payload_json=excluded.payload_json,state=excluded.state,updated_at=excluded.updated_at;
-  DELETE FROM notification_journal WHERE id NOT IN (SELECT id FROM notification_journal ORDER BY updated_at DESC,id DESC LIMIT 25);
-END;
-CREATE TRIGGER notification_journal_update AFTER UPDATE ON notifications
-WHEN OLD.state != NEW.state OR OLD.payload_json != NEW.payload_json BEGIN
-  INSERT INTO notification_journal(key,address_key,payload_json,state,updated_at) VALUES(NEW.key,NEW.address_key,NEW.payload_json,NEW.state,NEW.updated_at)
-    ON CONFLICT(key) DO UPDATE SET payload_json=excluded.payload_json,state=excluded.state,updated_at=excluded.updated_at;
-  DELETE FROM notification_journal WHERE id NOT IN (SELECT id FROM notification_journal ORDER BY updated_at DESC,id DESC LIMIT 25);
-END;

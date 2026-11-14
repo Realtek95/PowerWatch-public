@@ -176,7 +176,7 @@ fn execute(
         "inspect" => {
             json!(
                 { "polls" : store.poll_states() ?, "notifications" : store
-                .notification_log() ? }
+                .notification_log() ?, "pending" : store.pending_notifications() ? }
             )
         }
         "tick" => serde_json::to_value(powerwatch_runtime::tick(&mut store, wall)?)?,

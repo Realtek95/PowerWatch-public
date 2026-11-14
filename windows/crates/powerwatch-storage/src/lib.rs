@@ -68,14 +68,17 @@ impl Store {
     }
     fn from_connection(mut conn: Connection) -> Result<Self> {
         conn.busy_timeout(std::time::Duration::from_secs(5))?;
-        let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-        if ![0, 1].contains(&version) {
-            return Err(StorageError::Schema);
-        }
         conn.execute_batch("PRAGMA foreign_keys=ON;")?;
-        let tx = conn.transaction()?;
-        if version == 0 {
-            tx.execute_batch(include_str!("schema.sql"))?;
+        let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let version: i64 = tx.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+        match version {
+            0 => {
+                tx.execute_batch(include_str!("schema.sql"))?;
+                tx.execute_batch(include_str!("notifications-v2.sql"))?;
+            }
+            1 => tx.execute_batch(include_str!("notifications-v2.sql"))?,
+            2 => {}
+            _ => return Err(StorageError::Schema),
         }
         tx.commit()?;
         Ok(Self { conn })
@@ -143,6 +146,7 @@ impl Store {
                 "schedule_changes",
                 "daily_schedule_archive",
                 "notifications",
+                "notification_baselines",
                 "notification_journal",
                 "poll_state",
             ] {
@@ -171,6 +175,7 @@ impl Store {
             "schedule_changes",
             "daily_schedule_archive",
             "notifications",
+            "notification_baselines",
             "notification_journal",
             "poll_state",
         ] {
@@ -320,10 +325,24 @@ impl Store {
         }
         self.reconcile(now)?;
         let previous = self.cached(key)?;
+        let reference = self.notification_reference(key)?.unwrap_or_else(|| {
+            powerwatch_notifications::ForecastReference::from_snapshot(&snapshot)
+        });
+        let reference = reference
+            .advance(
+                &snapshot,
+                now,
+                self.load_book()?.state().check_interval_minutes,
+            )
+            .0;
         let today = now
             .with_timezone(&powerwatch_core::time::LOCAL_ZONE)
             .date_naive();
         let tx = self.conn.transaction()?;
+        tx.execute(
+            "INSERT INTO notification_baselines(address_key,baseline_json) VALUES(?1,?2) ON CONFLICT(address_key) DO UPDATE SET baseline_json=excluded.baseline_json",
+            params![key, encode(& reference) ?],
+        )?;
         let updated_book = Self::source_queue_update(&tx, key, &address, &mut snapshot, now)?;
         let changes = previous
             .as_ref()

@@ -4,7 +4,7 @@ mod network;
 pub mod widget;
 use chrono::{DateTime, TimeDelta, Utc};
 pub use network::configure_http_policy;
-use powerwatch_notifications::plan_snapshot;
+use powerwatch_notifications::plan_with_reference;
 use powerwatch_providers::{SnapshotSource, live::service::LiveScheduleSource};
 use powerwatch_storage::{StorageError, Store, address_key};
 use serde::Serialize;
@@ -166,11 +166,13 @@ pub fn tick_with_source(
                     .iter()
                     .find(|entry| entry.id == saved.id)
                     .is_some_and(|entry| entry.notifications_enabled);
-                let plans = plan_snapshot(
+                let reference = store.notification_reference(&key)?;
+                let plans = plan_with_reference(
                     &key,
                     &saved.id,
                     &snapshot,
                     previous.as_ref(),
+                    reference.as_ref(),
                     finished,
                     session.check_interval_minutes,
                     &prefs,

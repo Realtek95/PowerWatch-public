@@ -13,6 +13,12 @@ import type { BackgroundStatus, NotificationPreferences } from "../types";
 import { toggle } from "./controls";
 
 export function journalMarkup(value: BackgroundStatus): string {
+  value = {
+    ...value,
+    notifications: value.notifications.filter(
+      (record) => record.state !== "planned" && record.state !== "cancelled",
+    ),
+  };
   const label = (state: string) =>
     uk.notificationStates[state as keyof typeof uk.notificationStates] ?? state;
   return `<div class="button-row"><button class="text-button" data-action="notifications">${uk.reloadJournal}</button></div>

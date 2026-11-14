@@ -1,15 +1,16 @@
 //! Pure local notification planning. OS acceptance is not delivery confirmation.
+mod revision;
 pub mod text;
 use chrono::{DateTime, TimeDelta, Timelike, Utc};
 use powerwatch_core::{
     cache::{Freshness, FreshnessStatus},
-    history::{compare, outage_periods},
+    history::outage_periods,
     model::{ScheduleSnapshot, ScheduleState, SourceStatus},
     monitoring::WorkWindow,
     time::LOCAL_ZONE,
 };
+pub use revision::{ForecastReference, ForecastUpdate};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct NotificationPreferences {
@@ -157,6 +158,9 @@ impl PlannedNotification {
         now: DateTime<Utc>,
         interval: u16,
     ) -> bool {
+        if self.kind == NotificationKind::ScheduleChanged {
+            return revision::updates_usable(snapshot, now, interval);
+        }
         if matches!(
             self.kind,
             NotificationKind::SourceOutage
@@ -273,6 +277,29 @@ pub fn plan_snapshot(
     interval: u16,
     prefs: &NotificationPreferences,
 ) -> Result<Vec<PlannedNotification>, serde_json::Error> {
+    let reference = previous.map(ForecastReference::from_snapshot);
+    plan_with_reference(
+        key,
+        local_id,
+        snapshot,
+        previous,
+        reference.as_ref(),
+        now,
+        interval,
+        prefs,
+    )
+}
+#[allow(clippy::too_many_arguments)]
+pub fn plan_with_reference(
+    key: &str,
+    local_id: &str,
+    snapshot: &ScheduleSnapshot,
+    previous: Option<&ScheduleSnapshot>,
+    reference: Option<&ForecastReference>,
+    now: DateTime<Utc>,
+    interval: u16,
+    prefs: &NotificationPreferences,
+) -> Result<Vec<PlannedNotification>, serde_json::Error> {
     if !prefs.enabled || !prefs.is_valid() {
         return Ok(Vec::new());
     }
@@ -281,7 +308,7 @@ pub fn plan_snapshot(
         .address_check
         .as_ref()
         .is_some_and(|check| check.evidence.usable_at(now, TimeDelta::minutes(45)));
-    if !forecast_current && !address_current {
+    if !forecast_current && !address_current && !revision::updates_usable(snapshot, now, interval) {
         return Ok(Vec::new());
     }
     let mut plans = Vec::new();
@@ -354,50 +381,44 @@ pub fn plan_snapshot(
             plans.push(item);
         }
     }
-    if let Some(old) = previous {
-        let version = format!(
-            "{:x}:{}",
-            Sha256::digest(powerwatch_core::history::signature(snapshot)?),
-            old.received_at.timestamp_millis()
-        );
-        let changes = compare(old, snapshot);
-        if forecast_current
-            && prefs.schedule_changes
-            && changes.iter().any(|change| {
-                !matches!(
-                    change.kind,
-                    powerwatch_core::history::ChangeKind::SourceStatus
-                        | powerwatch_core::history::ChangeKind::ExpectedRestoration
-                        | powerwatch_core::history::ChangeKind::DataAvailability
-                )
-            })
-        {
-            plans.push(plan(
-                (key, local_id),
-                snapshot,
-                NotificationKind::ScheduleChanged,
-                now,
-                &version,
-                text::SCHEDULE_CHANGED.into(),
-                prefs,
-            ));
-        }
-        if (forecast_current || address_current)
-            && prefs.restoration_changes
-            && old.expected_restoration != snapshot.expected_restoration
-            && (snapshot.source_status != SourceStatus::Unknown
-                || snapshot.expected_restoration.is_some())
-        {
-            plans.push(plan(
-                (key, local_id),
-                snapshot,
-                NotificationKind::RestorationChanged,
-                now,
-                &version,
-                text::RESTORATION_CHANGED.into(),
-                prefs,
-            ));
-        }
+    let reference = reference
+        .cloned()
+        .unwrap_or_else(|| ForecastReference::from_snapshot(snapshot));
+    let (next, update) = reference.advance(snapshot, now, interval);
+    let version = format!("revision-{}", next.revision);
+    let changed = update.is_some() && prefs.schedule_changes;
+    if changed {
+        plans.push(plan(
+            (key, local_id),
+            snapshot,
+            NotificationKind::ScheduleChanged,
+            now,
+            &version,
+            text::schedule_update(&update.unwrap(), now),
+            prefs,
+        ));
+    }
+    if let Some(old) = previous
+        && (forecast_current || address_current)
+        && prefs.restoration_changes
+        && !changed
+        && old.expected_restoration != snapshot.expected_restoration
+        && (snapshot.source_status != SourceStatus::Unknown
+            || snapshot.expected_restoration.is_some())
+    {
+        plans.push(plan(
+            (key, local_id),
+            snapshot,
+            NotificationKind::RestorationChanged,
+            now,
+            &format!(
+                "{:?}:{}",
+                snapshot.expected_restoration,
+                old.received_at.timestamp_millis()
+            ),
+            text::RESTORATION_CHANGED.into(),
+            prefs,
+        ));
     }
     plans.sort_by_key(|plan| plan.at);
     plans.dedup_by(|first, second| first.key == second.key);
