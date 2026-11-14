@@ -34,7 +34,7 @@ export function sourcesMarkup(info: AppInfo): string {
             .filter((c) => c.providerId === id)
             .map(
               (c) =>
-                `<div class="source-check"><strong>${html(c.operatorName)} · ${uk.group} ${html(c.queue)}</strong><span>${uk.sourceCheckStatuses[c.status] ?? uk.sourceCheckStatuses.error}</span><small>${uk.lastAttempt}: ${html(formatMoment(c.checkedAt))}${c.publishedAt ? ` · ${uk.published}: ${html(formatMoment(c.publishedAt))}` : ""}</small>${c.errorCode ? `<p class="muted">${html(uk.errors[c.errorCode as keyof typeof uk.errors] ?? uk.errors.source_unavailable)}</p>` : ""}</div>`,
+                `<div class="source-check"><strong>${html(c.operatorName)} · ${uk.group} ${html(c.queue)}</strong><span>${uk.sourceCheckStatuses[c.status] ?? uk.sourceCheckStatuses.error}</span><small>${uk.lastAttempt}: ${html(formatMoment(c.checkedAt))}${c.publishedAt ? ` · ${uk.published}: ${html(formatMoment(c.publishedAt))}` : ""}</small>${c.errorCode ? `<p class="muted">${html(uk.errors[c.errorCode as keyof typeof uk.errors] ?? uk.errors.source_unavailable)}</p>` : ""}${c.httpStatus ? `<small>${uk.sourceHttpStatus}: HTTP ${c.httpStatus}</small>` : ""}</div>`,
             )
             .join("") || `<p class="muted">${uk.sourceChecksEmpty}</p>`
         }</section>`,

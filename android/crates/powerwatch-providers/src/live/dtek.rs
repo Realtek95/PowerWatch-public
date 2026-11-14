@@ -275,7 +275,7 @@ impl Dtek {
         let response = match http.dtek_request(Some(&form), Some(&session.csrf), Utc::now()) {
             Ok(value) => value,
             Err(error) => {
-                if matches!(error, FetchError::Http(400)) {
+                if invalidates_session(&error) {
                     *slot = None;
                 }
                 return Err(error);
@@ -360,6 +360,12 @@ impl Dtek {
             self.read_street(http, operator, settlement, &input.street, now)?;
         parse_response(response, &city, &street, &input.house, checked)
     }
+}
+fn invalidates_session(error: &FetchError) -> bool {
+    matches!(
+        error,
+        FetchError::Http(400 | 401 | 403) | FetchError::InvalidData
+    )
 }
 fn local_datetime(value: &str) -> Result<DateTime<Utc>, FetchError> {
     for format in [

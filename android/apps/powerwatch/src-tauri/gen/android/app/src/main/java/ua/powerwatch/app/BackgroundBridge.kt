@@ -8,6 +8,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -25,7 +27,7 @@ object BackgroundBridge {
     @JvmStatic external fun nativeCall(database: String, operation: String, payload: String, wall: Long): String
     private val executor = Executors.newSingleThreadScheduledExecutor()
     private var foreground: ScheduledFuture<*>? = null
-    private var visible = false
+    @Volatile private var visible = false
     private fun database(context: Context) = context.getSharedPreferences("powerwatch", 0).getString("database", null)
     fun call(context: Context, operation: String, payload: JSONObject = JSONObject()): Any? {
         val path = database(context) ?: return null
@@ -38,7 +40,7 @@ object BackgroundBridge {
         PowerWatchWidget.refreshDefinitions(app)
         val periodic = PeriodicWorkRequestBuilder<PulseWorker>(15, TimeUnit.MINUTES).build()
         WorkManager.getInstance(app).enqueueUniquePeriodicWork("powerwatch-pulse", ExistingPeriodicWorkPolicy.KEEP, periodic)
-        enqueue(app, 0, ExistingWorkPolicy.KEEP)
+        enqueueLocal(app, ExistingWorkPolicy.KEEP)
         if (visible) startTicker(app)
     }
     @Synchronized fun startForeground(context: Context) { visible = true; startTicker(context) }
@@ -49,13 +51,28 @@ object BackgroundBridge {
         }, 0, 2, TimeUnit.SECONDS)
     }
     @Synchronized fun stopForeground() { visible = false; foreground?.cancel(false); foreground = null }
+    internal fun pollingConstraints() = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+    private fun networkReady(context: Context): Boolean {
+        val connectivity = context.getSystemService(ConnectivityManager::class.java)
+        val capabilities = connectivity.getNetworkCapabilities(connectivity.activeNetwork) ?: return false
+        if (!visible && connectivity.isActiveNetworkMetered && connectivity.restrictBackgroundStatus == ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED) return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
+    fun enqueueLocal(context: Context, policy: ExistingWorkPolicy) {
+        val request = OneTimeWorkRequestBuilder<PulseWorker>().build()
+        WorkManager.getInstance(context).enqueueUniqueWork("powerwatch-local-pulse", policy, request)
+    }
     fun enqueue(context: Context, delay: Long, policy: ExistingWorkPolicy) {
-        val request = OneTimeWorkRequestBuilder<MonitorWorker>().setInitialDelay(delay.coerceAtLeast(0), TimeUnit.SECONDS).build()
+        val request = OneTimeWorkRequestBuilder<MonitorWorker>().setConstraints(pollingConstraints()).setInitialDelay(delay.coerceAtLeast(0), TimeUnit.SECONDS).build()
         WorkManager.getInstance(context).enqueueUniqueWork("powerwatch-monitor", policy, request)
     }
-    fun run(context: Context): Long {
+    fun run(context: Context, networkAvailable: Boolean = networkReady(context)): Long {
         // Deliver still-relevant local alarms before any potentially slow HTTP.
         syncAlarms(context)
+        if (!networkAvailable) {
+            PowerWatchWidget.updateAll(context)
+            return 15
+        }
         val tick = call(context, "tick") as? JSONObject ?: return 900
         syncAlarms(context)
         PowerWatchWidget.updateAll(context)
@@ -113,7 +130,7 @@ class MonitorWorker(context: Context, params: WorkerParameters): Worker(context,
     } catch (error: Exception) { Log.e("PowerWatch","Local work failed",error); Result.retry() }
 }
 class PulseWorker(context: Context, params: WorkerParameters): Worker(context,params) {
-    override fun doWork(): Result = try { PowerWatchWidget.updateAll(applicationContext);BackgroundBridge.enqueue(applicationContext,0,ExistingWorkPolicy.KEEP);Result.success() }catch(error:Exception){Log.e("PowerWatch","Local widget pulse failed",error);Result.retry()}
+    override fun doWork(): Result = try { BackgroundBridge.syncAlarms(applicationContext);PowerWatchWidget.updateAll(applicationContext);BackgroundBridge.enqueue(applicationContext,0,ExistingWorkPolicy.KEEP);Result.success() }catch(error:Exception){Log.e("PowerWatch","Local widget pulse failed",error);Result.retry()}
 }
 class ReminderReceiver: BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -125,7 +142,7 @@ class BootReceiver: BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if(intent.action==Intent.ACTION_MY_PACKAGE_REPLACED)PowerWatchWidget.refreshDefinitions(context)
         if (intent.action in setOf(Intent.ACTION_BOOT_COMPLETED,Intent.ACTION_MY_PACKAGE_REPLACED,Intent.ACTION_TIME_CHANGED,Intent.ACTION_TIMEZONE_CHANGED)) {
-            BackgroundBridge.enqueue(context,0,ExistingWorkPolicy.REPLACE)
+            BackgroundBridge.enqueueLocal(context,ExistingWorkPolicy.REPLACE)
         }
     }
 }

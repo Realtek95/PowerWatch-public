@@ -28,7 +28,7 @@ open class PowerWatchWidget: AppWidgetProvider() {
                 try {
                     BackgroundBridge.call(context,"request-refresh")
                     updateAll(context,true)
-                    val request=OneTimeWorkRequestBuilder<RefreshWorker>().setBackoffCriteria(BackoffPolicy.LINEAR,10,java.util.concurrent.TimeUnit.SECONDS).build()
+                    val request=OneTimeWorkRequestBuilder<RefreshWorker>().setConstraints(BackgroundBridge.pollingConstraints()).setBackoffCriteria(BackoffPolicy.LINEAR,10,java.util.concurrent.TimeUnit.SECONDS).build()
                     WorkManager.getInstance(context).enqueueUniqueWork("powerwatch-manual-refresh",ExistingWorkPolicy.KEEP,request)
                 } catch(error:Exception){Log.e("PowerWatch","Widget refresh request failed",error)}finally{pending.finish();shutdown()}
             } }

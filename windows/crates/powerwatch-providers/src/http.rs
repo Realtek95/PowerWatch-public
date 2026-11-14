@@ -42,7 +42,10 @@ impl FetchError {
             Self::Timeout => "source_timeout",
             Self::RateLimited(_) => "source_limited",
             Self::InvalidData => "invalid_data",
-            Self::Network | Self::Http(_) => "source_unavailable",
+            Self::Network => "source_network",
+            Self::Http(401 | 403) => "source_access_denied",
+            Self::Http(400) => "source_request_rejected",
+            Self::Http(_) => "source_unavailable",
         }
     }
 }

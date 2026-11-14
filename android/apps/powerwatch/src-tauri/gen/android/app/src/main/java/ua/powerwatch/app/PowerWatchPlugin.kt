@@ -57,6 +57,13 @@ class PowerWatchPlugin(private val activity: Activity) : Plugin(activity) {
             .put("pending", (activity as? MainActivity)?.notificationPermissionPending == true))
     }
     @Command
+    fun openBackgroundSettings(invoke: Invoke) {
+        try {
+            activity.startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:${activity.packageName}")))
+            invoke.resolve(JSObject())
+        } catch (_: Exception) { invoke.reject("platform_error") }
+    }
+    @Command
     fun flushNotifications(invoke: Invoke) {
         Thread({
             try { BackgroundBridge.syncAlarms(activity.applicationContext); invoke.resolve(JSObject()) }

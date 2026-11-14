@@ -2,6 +2,7 @@ import { uk } from "../strings";
 import { escapeHtml as html, formatMoment } from "../format";
 import {
   getBackgroundStatus,
+  openBackgroundSettings,
   setNotificationPreferences,
   setPlatformSettings,
   testNotification,
@@ -59,6 +60,7 @@ export class NotificationSettingsForm {
         "",
       )}</div></fieldset><fieldset aria-label="${uk.quietHours}">${check("quiet", uk.quietHours, prefs.quietHours !== null)}<p class="muted">${uk.quietHint}</p><fieldset class="time-window quiet-window" ${prefs.quietHours ? "" : "disabled"}><div><label for="quiet-from">${uk.workFrom}</label><input id="quiet-from" type="time" name="quiet-from" value="${time(prefs.quietHours?.startMinute ?? 1380)}" required></div><div><label for="quiet-until">${uk.workUntil}</label><input id="quiet-until" type="time" name="quiet-until" value="${time(prefs.quietHours?.endMinute ?? 420)}" required></div></fieldset></fieldset><div class="switch-group">${check("sound", uk.sound, prefs.sound)}${value.platform === "android" ? check("vibration", uk.vibration, prefs.vibration) : ""}</div><div class="save-footer"><button class="primary-button" type="submit">${uk.saveNotifications}</button><p class="result" role="status" hidden></p></div></form>
     ${value.platform === "windows" ? `<form class="platform-form settings-section"><h3>${uk.windowsSettings}</h3><div class="switch-group">${check("tray", uk.tray, value.platformSettings.tray)}${check("autostart", uk.autostart, value.platformSettings.autostart)}</div><div class="save-footer"><button class="primary-button" type="submit">${uk.savePlatform}</button><p class="result" role="status" hidden></p></div></form>` : ""}
+    ${value.platform === "android" ? `<section class="settings-section android-background"><h3>${uk.androidBackgroundSettings}</h3><p class="muted">${uk.androidBackgroundHelp}</p><button class="secondary-button" data-local="background-settings">${uk.androidBackgroundSettings}</button><p class="result" role="status" hidden></p></section>` : ""}
     <section class="settings-section notification-test"><h3>${uk.testSection}</h3><p class="muted">${uk.notificationLimits[value.platform]}</p><div class="button-row"><button class="secondary-button" data-local="test">${uk.testNotification}</button></div><p class="result" role="status" hidden></p></section>`;
     const perform = async (
       section: HTMLElement,
@@ -157,6 +159,8 @@ export class NotificationSettingsForm {
       )!;
       if (action === "test")
         void perform(section, testNotification, uk.notificationQueued);
+      if (action === "background-settings")
+        void perform(section, openBackgroundSettings, uk.systemSettingsOpened);
     });
   }
 }

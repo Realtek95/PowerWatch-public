@@ -37,6 +37,17 @@ pub fn clear_notification_journal(
     Ok(())
 }
 #[tauri::command(async)]
+pub fn open_background_settings(app: tauri::AppHandle) -> Result<(), CommandError> {
+    #[cfg(target_os = "android")]
+    return android::open_background_settings(&app);
+    {
+        let _ = app;
+        Err(CommandError {
+            code: "platform_error",
+        })
+    }
+}
+#[tauri::command(async)]
 pub fn get_background_status(
     state: tauri::State<'_, AppState>,
     app: tauri::AppHandle,

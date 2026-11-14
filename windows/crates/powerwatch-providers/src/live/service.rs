@@ -15,6 +15,8 @@ pub struct LiveService {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceCheck {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub http_status: Option<u16>,
     pub provider_id: String,
     pub operator_id: String,
     pub operator_name: String,
@@ -393,6 +395,10 @@ impl LiveService {
         if let Some(reporter) = reporter {
             let operator = registry::find(&queue.operator_id).ok_or(FetchError::InvalidData)?;
             reporter.record(&SourceCheck {
+                http_status: result.as_ref().err().and_then(|error| match error {
+                    FetchError::Http(status) => Some(*status),
+                    _ => None,
+                }),
                 provider_id: "dtek-dnem".into(),
                 operator_id: queue.operator_id.clone(),
                 operator_name: operator.operator.name.clone(),
@@ -477,6 +483,10 @@ impl LiveService {
                       result: Result<SourceSchedule, FetchError>|
          -> Result<(), FetchError> {
             let check = SourceCheck {
+                http_status: result.as_ref().err().and_then(|error| match error {
+                    FetchError::Http(status) => Some(*status),
+                    _ => None,
+                }),
                 provider_id: provider.into(),
                 operator_id: queue.operator_id.clone(),
                 operator_name: operator.operator.name.clone(),

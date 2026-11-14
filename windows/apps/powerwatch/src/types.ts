@@ -7,6 +7,7 @@ export interface RuntimeInfo {
   now: string;
 }
 export interface SourceCheck {
+  httpStatus?: number;
   providerId: string;
   operatorId: string;
   operatorName: string;

@@ -77,6 +77,9 @@ export function getSession(): Promise<SessionState> {
 export function getBackgroundStatus(): Promise<BackgroundStatus> {
   return isTauri() ? invoke("get_background_status") : readOnly();
 }
+export function openBackgroundSettings(): Promise<void> {
+  return isTauri() ? invoke("open_background_settings") : readOnly();
+}
 export function clearNotificationJournal(id: number | null): Promise<void> {
   return isTauri() ? invoke("clear_notification_journal", { id }) : readOnly();
 }

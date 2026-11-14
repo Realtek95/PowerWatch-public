@@ -684,6 +684,9 @@ async fn get_dashboard(
             if matches!(
                 error.code,
                 "source_unavailable"
+                    | "source_network"
+                    | "source_access_denied"
+                    | "source_request_rejected"
                     | "source_timeout"
                     | "source_limited"
                     | "invalid_data"
@@ -808,6 +811,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         updates::check_updates,
         updates::install_update,
         get_background_status,
+        open_background_settings,
         clear_notification_journal,
         set_notification_preferences,
         set_address_options,
