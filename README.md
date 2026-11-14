@@ -4,6 +4,8 @@
 
 PowerWatch — незалежний проєкт, не офіційний застосунок ДТЕК, YASNO чи інших операторів. Графік — це план, а не вимірювання живлення.
 
+<img src="screenshot.png" alt="Головний екран PowerWatch у темній темі на Windows" width="420">
+
 ## Встановлення й оновлення
 
 Готові APK та Windows-інсталятор, опис змін і підписані маніфести шукайте у [GitHub Releases](https://github.com/Realtek95/PowerWatch-public/releases). Код у `windows/` та `android/` є окремими зрізами єдиної реалізації; інсталяційні файли до Git не додаються.
