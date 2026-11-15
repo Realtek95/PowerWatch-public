@@ -236,6 +236,13 @@ fn get_local_settlements(oblast_id: String) -> Vec<CatalogEntry> {
     powerwatch_providers::catalog::settlements(&oblast_id)
 }
 #[tauri::command]
+fn get_address_lookup_support(operator_id: String, settlement_id: String) -> bool {
+    powerwatch_providers::live::service::LiveService::address_lookup_supported(
+        &operator_id,
+        &settlement_id,
+    )
+}
+#[tauri::command]
 fn get_operators(oblast_id: Option<String>) -> Vec<CatalogEntry> {
     powerwatch_providers::registry::all()
         .iter()
@@ -827,6 +834,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         project_dashboard,
         get_oblasts,
         get_operators,
+        get_address_lookup_support,
         get_operator_groups,
         get_local_settlements,
         get_country_catalog,

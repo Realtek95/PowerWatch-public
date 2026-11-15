@@ -6,6 +6,27 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 
 class MainActivity : TauriActivity() {
+  override fun onWebViewCreate(webView: android.webkit.WebView) {
+    super.onWebViewCreate(webView)
+    var pending = false
+    val callback = object : androidx.activity.OnBackPressedCallback(true) {
+      override fun handleOnBackPressed() {
+        if (pending) return
+        pending = true
+        // The local UI consumes Back for a popup, dialog or help page. Returning
+        // true keeps Android's normal Back behavior when no app layer is open.
+        webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('powerwatch-back', {cancelable:true}))") { result ->
+          pending = false
+          if (result != "false" && !isFinishing) {
+            isEnabled = false
+            onBackPressedDispatcher.onBackPressed()
+            isEnabled = true
+          }
+        }
+      }
+    }
+    onBackPressedDispatcher.addCallback(this, callback)
+  }
   private var permissionFlowReady = false
   var notificationPermissionPending = false
     private set

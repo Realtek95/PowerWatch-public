@@ -343,7 +343,7 @@ impl Dtek {
             return Err(FetchError::InvalidData);
         }
         let query = query.trim().to_lowercase();
-        if query.chars().count() < 3 {
+        if super::address::street_query(&query).chars().count() < 3 {
             return Ok(Vec::new());
         }
         let mut slot = self.session.lock().map_err(|_| FetchError::Network)?;
@@ -354,8 +354,7 @@ impl Dtek {
             .filter(|street| {
                 !street.is_empty()
                     && street.chars().count() <= 200
-                    && (street.to_lowercase().contains(&query)
-                        || super::address::same_street(street, &query))
+                    && super::address::street_suggestion_matches(street, &query)
             })
             .take(100)
             .map(|street| powerwatch_core::model::CatalogEntry {

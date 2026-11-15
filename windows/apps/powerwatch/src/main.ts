@@ -31,6 +31,7 @@ import {
   getBackgroundStatus,
   clearNotificationJournal,
   setAddressOptions,
+  openBackgroundSettings,
 } from "./service";
 import {
   NotificationSettingsForm,
@@ -40,6 +41,8 @@ import {
 import { listen } from "@tauri-apps/api/event";
 import { isTauri } from "@tauri-apps/api/core";
 import { AddressWizard } from "./components/address-wizard";
+import { DialogDismissal } from "./components/dialog";
+import { createHelpPage } from "./components/help";
 import { aboutMarkup, sourcesMarkup, privacyMarkup } from "./components/about";
 import { evidenceMarkup } from "./components/evidence";
 import { updateMarkup } from "./components/updates";
@@ -77,7 +80,8 @@ type Page =
   | "settings"
   | "addresses"
   | "diagnostics"
-  | "changes";
+  | "changes"
+  | "help";
 const root = document.querySelector<HTMLDivElement>("#app");
 if (!root) throw new Error("Missing app root");
 const app: HTMLDivElement = root;
@@ -85,7 +89,22 @@ installControls(app);
 app.innerHTML = `<div class="app-shell"></div><dialog id="details"><div class="dialog-header"><h2 id="dialog-title"></h2><button class="icon-button" data-action="close-dialog" aria-label="${uk.close}">${icon("x")}</button></div><div id="dialog-content"></div></dialog>`;
 const shell = app.querySelector<HTMLDivElement>(".app-shell")!;
 let dialogFocus: () => void = () => {};
-app.querySelector("#details")?.addEventListener("close", () => dialogFocus());
+let addressWizard: AddressWizard | null = null;
+const detailsDialog = app.querySelector<HTMLDialogElement>("#details")!;
+const dialogDismissal = new DialogDismissal(
+  detailsDialog,
+  () => addressWizard?.hasUnsavedChanges ?? false,
+  () => addressWizard?.saving ?? false,
+);
+detailsDialog.addEventListener("close", () => {
+  document.body.classList.remove("has-open-dialog");
+  ++dialogVersion;
+  addressWizard?.dispose();
+  addressWizard = null;
+  dialogDismissal.reset();
+  detailsDialog.querySelector("#dialog-content")?.replaceChildren();
+  dialogFocus();
+});
 let appInfo: AppInfo | null = null;
 let aboutError = false;
 let notificationsAllowed: boolean | null = null;
@@ -99,6 +118,8 @@ let session: SessionState | null = null;
 let addressId: string | null = null;
 let dayOffset = 0;
 let page: Page = "home";
+let helpReturnPage: Page = "home";
+let helpReturnScroll = 0;
 let mode: "scale" | "list" =
   localStorage.getItem("schedule-view") === "list" ? "list" : "scale";
 let receivedAt = performance.now();
@@ -258,7 +279,8 @@ function openAddressWizard(id?: string): void {
     '<div id="address-wizard"></div>',
   );
   const container = document.querySelector<HTMLElement>("#address-wizard");
-  if (container) new AddressWizard(container, initial, applySession);
+  if (container)
+    addressWizard = new AddressWizard(container, initial, applySession);
 }
 
 async function mutateSession(
@@ -276,6 +298,8 @@ async function mutateSession(
 }
 
 function render(): void {
+  const savedHelp =
+    page === "help" ? shell.querySelector<HTMLElement>("#help-page") : null;
   const archiveScroll =
     shell.querySelector<HTMLElement>(".archive-dates")?.scrollLeft;
   const restoreFocus = retainFocus(shell);
@@ -305,36 +329,39 @@ function render(): void {
     value?.selectedDay.intervals.some((part) => part.state === "unknown") ??
     false;
   const event = value ? eventCopy(value, currentNow(), degraded) : null;
-  shell.innerHTML = `<header class="app-header"><div class="brand"><div class="brand-icon">${icon("zap")}</div><div><h1>PowerWatch</h1><p>${uk.tagline}</p></div></div><div class="header-actions"><button class="icon-button" data-action="notifications" aria-label="${uk.notifications}">${icon("bell")}</button><button class="icon-button ${refreshBusy ? "is-loading" : ""}" data-action="refresh" aria-label="${uk.refresh}" ${refreshBusy || !session?.onboardingComplete ? "disabled" : ""}>${icon("refresh")}</button></div></header>
-    <main${motion}><div id="notification-permission-notice">${permissionMarkup()}</div><div class="context-strip">${icon("info")}<span>${uk.liveHint}</span><span class="current-time"><b data-clock>${value ? formatTime(currentNow()) : "—"}</b></span></div>
+  shell.innerHTML = `<header class="app-header"><div class="brand"><div class="brand-icon">${icon("zap")}</div><div><h1>PowerWatch</h1><p>${uk.tagline}</p></div></div><div class="header-actions"><button class="icon-button" data-action="help" aria-label="${uk.helpTitle}" title="${uk.helpTitle}">${icon("help")}</button><button class="icon-button" data-action="notifications" aria-label="${uk.notifications}">${icon("bell")}</button><button class="icon-button ${refreshBusy ? "is-loading" : ""}" data-action="refresh" aria-label="${uk.refresh}" ${refreshBusy || !session?.onboardingComplete ? "disabled" : ""}>${icon("refresh")}</button></div></header>
+    <main${motion}><div ${page === "help" ? "hidden" : ""}><div id="notification-permission-notice">${permissionMarkup()}</div><div class="context-strip">${icon("info")}<span>${uk.liveHint}</span><span class="current-time"><b data-clock>${value ? formatTime(currentNow()) : "—"}</b></span></div>
     ${projectionExpired ? `<p class="notice" role="status">${uk.projectionExpired}</p>` : ""}
     ${value && value.freshness.status !== "current" ? `<p class="notice" role="status"><strong>${value.freshness.status === "clock_mismatch" ? uk.clockMismatch : uk.staleData}.</strong> ${uk.staleHint}</p>` : ""}
     ${address && session?.onboardingComplete ? `<button class="address-card" data-page="addresses" aria-label="${uk.chooseAddress}">${icon("pin", "address-pin")}<span class="address-text"><small>${html(address.label)}</small><strong>${html(address.settlement)}</strong><span>${html(address.street)}, ${html(address.house)}</span></span><span class="queue-block">${icon("layers")}<span><small>${uk.queue}</small><b>${html(address.queue ?? "—")}</b></span></span>${icon("chevron", "address-chevron")}</button>` : ""}
+    </div>
     ${
-      session && !session.onboardingComplete
-        ? onboardingMarkup()
-        : page === "addresses"
-          ? addressesMarkup()
-          : page === "history"
-            ? archiveMarkup(archiveView, archiveDate) +
-              (archiveView?.dashboard
-                ? scheduleMarkup(archiveView.dashboard, true)
-                : "")
-            : page === "statistics"
-              ? statisticsMarkup(archiveView)
-              : page === "changes"
-                ? changesMarkup(archiveView, changeDate)
-                : page === "diagnostics"
-                  ? diagnosticsMarkup({
-                      data,
-                      lastAttempt,
-                      loading: refreshBusy || projecting,
-                    })
-                  : page === "settings"
-                    ? settingsMarkup()
-                    : !value
-                      ? `<section class="card loading-card" role="status">${refreshQueued ? uk.refreshQueued : errorCode ? html(errorMessage()) : uk.loading}</section>`
-                      : `
+      page === "help"
+        ? '<div id="help-content"></div>'
+        : session && !session.onboardingComplete
+          ? onboardingMarkup()
+          : page === "addresses"
+            ? addressesMarkup()
+            : page === "history"
+              ? archiveMarkup(archiveView, archiveDate) +
+                (archiveView?.dashboard
+                  ? scheduleMarkup(archiveView.dashboard, true)
+                  : "")
+              : page === "statistics"
+                ? statisticsMarkup(archiveView)
+                : page === "changes"
+                  ? changesMarkup(archiveView, changeDate)
+                  : page === "diagnostics"
+                    ? diagnosticsMarkup({
+                        data,
+                        lastAttempt,
+                        loading: refreshBusy || projecting,
+                      })
+                    : page === "settings"
+                      ? settingsMarkup()
+                      : !value
+                        ? `<section class="card loading-card" role="status">${refreshQueued ? uk.refreshQueued : errorCode ? html(errorMessage()) : uk.loading}</section>`
+                        : `
       ${
         page === "home"
           ? `<section class="status-card ${degraded ? "unknown" : value.currentState}"><span class="status-icon">${icon(value.currentState === "unknown" || degraded ? "info" : "zap")}</span><div><h2>${uk.statuses[value.currentState]}</h2><p>${degraded ? uk.cachedForecast : uk.forecastNote}</p></div></section>${sourceReportMarkup(value)}
@@ -344,7 +371,7 @@ function render(): void {
       }
       ${scheduleMarkup(value)}${page === "home" ? evidenceMarkup(value) + emptyCard("history", true) + emptyCard("statistics", true) : ""}`
     }
-    <p class="footer-note">${uk.actualPowerNote}</p></main>
+    ${page === "help" ? "" : `<p class="footer-note">${uk.actualPowerNote}</p>`}</main>
     ${
       session?.onboardingComplete
         ? `<nav class="bottom-nav" aria-label="PowerWatch">${(
@@ -364,6 +391,13 @@ function render(): void {
         : ""
     }
     `;
+  const helpContainer = shell.querySelector("#help-content");
+  if (helpContainer)
+    helpContainer.append(
+      savedHelp?.dataset.platform === (runtime.platform ?? "other")
+        ? savedHelp
+        : createHelpPage(runtime.platform),
+    );
   const preferencesContainer = shell.querySelector<HTMLElement>(
     "#monitoring-preferences",
   );
@@ -514,8 +548,39 @@ async function load(): Promise<void> {
 }
 
 let dialogVersion = 0;
+function closeHelp(): void {
+  if (page !== "help") return;
+  page = helpReturnPage;
+  render();
+  window.scrollTo({ top: helpReturnScroll });
+}
+window.addEventListener("powerwatch-back", (event) => {
+  if (!app.isConnected) return;
+  const popup = app.querySelector<HTMLElement>(
+    '.autocomplete-field input[aria-expanded="true"], .select-trigger[aria-expanded="true"]',
+  );
+  if (popup) {
+    event.preventDefault();
+    popup.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  } else if (detailsDialog.open) {
+    event.preventDefault();
+    dialogDismissal.requestClose();
+  } else if (page === "help") {
+    event.preventDefault();
+    closeHelp();
+  }
+});
 function showDialog(title: string, content: string): void {
   ++dialogVersion;
+  addressWizard?.dispose();
+  addressWizard = null;
+  dialogDismissal.reset();
   const dialog = document.querySelector<HTMLDialogElement>("#details");
   const heading = document.querySelector("#dialog-title");
   const body = document.querySelector("#dialog-content");
@@ -523,8 +588,10 @@ function showDialog(title: string, content: string): void {
   if (!dialog.open) dialogFocus = retainFocus(shell);
   heading.textContent = title;
   body.innerHTML = content;
+  body.scrollTop = 0;
   dialog.setAttribute("aria-labelledby", "dialog-title");
   dialog.showModal();
+  document.body.classList.add("has-open-dialog");
 }
 
 async function loadJournal(version: number): Promise<void> {
@@ -696,6 +763,33 @@ app.addEventListener("click", (event) => {
       showDialog(uk.about, `<p>${uk.errors.link_unavailable}</p>`),
     );
   switch (button.dataset.action) {
+    case "help":
+      if (page !== "help") {
+        helpReturnPage = page;
+        helpReturnScroll = window.scrollY;
+        page = "help";
+        render();
+        window.scrollTo({ top: 0 });
+      }
+      break;
+    case "help-back":
+      closeHelp();
+      break;
+    case "help-background-settings":
+      if (runtime.platform === "android") {
+        button.disabled = true;
+        void openBackgroundSettings()
+          .catch(() =>
+            showDialog(
+              uk.androidBackgroundSettings,
+              `<p>${uk.errors.platform_error}</p>`,
+            ),
+          )
+          .finally(() => {
+            button.disabled = false;
+          });
+      }
+      break;
     case "check-updates":
       void checkForUpdates(false);
       break;
@@ -783,7 +877,7 @@ app.addEventListener("click", (event) => {
       }
       break;
     case "close-dialog":
-      document.querySelector<HTMLDialogElement>("#details")?.close();
+      dialogDismissal.requestClose();
       break;
   }
 });

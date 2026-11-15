@@ -131,6 +131,14 @@ export function saveManualAddress(
 export function getOperators(oblastId: string | null): Promise<CatalogEntry[]> {
   return isTauri() ? invoke("get_operators", { oblastId }) : readOnly();
 }
+export function getAddressLookupSupport(request: {
+  operatorId: string;
+  settlementId: string;
+}): Promise<boolean> {
+  return isTauri()
+    ? invoke("get_address_lookup_support", request)
+    : Promise.resolve(false);
+}
 export function getOperatorGroups(operatorId: string): Promise<CatalogEntry[]> {
   return isTauri() ? invoke("get_operator_groups", { operatorId }) : readOnly();
 }

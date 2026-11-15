@@ -49,6 +49,12 @@ impl crate::SnapshotSource for LiveScheduleSource {
     }
 }
 impl LiveService {
+    /// Supported integration for this settlement, not proof of house coverage.
+    /// Reading this capability is local and does not initialize an HTTP session.
+    pub fn address_lookup_supported(operator: &str, settlement: &str) -> bool {
+        super::dtek::supports(operator, settlement)
+            || super::address::supports(operator, settlement)
+    }
     pub fn set_source_reporter(
         &self,
         reporter: std::sync::Arc<dyn SourceReporter>,

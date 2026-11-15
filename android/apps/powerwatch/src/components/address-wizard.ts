@@ -6,6 +6,7 @@ import {
   getLocalSettlements,
   getCountryCatalog,
   getOperators,
+  getAddressLookupSupport,
   getOperatorGroups,
   searchAddressCatalog,
   previewAddressGroup,
@@ -25,6 +26,7 @@ type CatalogApi = {
   cities: typeof getLocalSettlements;
   country: typeof getCountryCatalog;
   operators: typeof getOperators;
+  lookupSupport: typeof getAddressLookupSupport;
   groups: typeof getOperatorGroups;
   search: typeof searchAddressCatalog;
   previewGroup: typeof previewAddressGroup;
@@ -36,6 +38,7 @@ const api: CatalogApi = {
   cities: getLocalSettlements,
   country: getCountryCatalog,
   operators: getOperators,
+  lookupSupport: getAddressLookupSupport,
   groups: getOperatorGroups,
   search: searchAddressCatalog,
   previewGroup: previewAddressGroup,
@@ -64,6 +67,9 @@ export class AddressWizard {
   private resolvingGroup = false;
   private readonly groupNote = document.createElement("p");
   private readonly detectGroup = document.createElement("button");
+  private readonly lookupNote = document.createElement("p");
+  private lookupSupported: boolean | null = null;
+  private supportRevision = 0;
   private touched = false;
   private lookupRevision = 0;
   private lookupTimer: ReturnType<typeof setTimeout> | undefined;
@@ -102,6 +108,7 @@ export class AddressWizard {
         this.building.value = "";
         this.clearCountryHouse();
         this.clearGroup();
+        void this.refreshLookupSupport();
         this.updateSave();
       },
     );
@@ -233,6 +240,7 @@ export class AddressWizard {
       this.group.element,
       choiceNote,
       this.detectGroup,
+      this.lookupNote,
       nameLabel,
       this.name,
       note,
@@ -243,12 +251,29 @@ export class AddressWizard {
       event.preventDefault();
       void this.submit();
     });
-    this.form.addEventListener("input", () => {
+    this.lookupNote.className = "session-note";
+    this.lookupNote.setAttribute("role", "status");
+    const markDirty = () => {
       this.touched = true;
-    });
+    };
+    this.form.addEventListener("input", markDirty);
+    this.form.addEventListener("change", markDirty);
     container.replaceChildren(this.form);
     this.updateSave();
     void this.initialize();
+  }
+  get hasUnsavedChanges(): boolean {
+    return this.touched;
+  }
+  get saving(): boolean {
+    return this.busy;
+  }
+  dispose(): void {
+    this.cancelLookup();
+    ++this.revision;
+    ++this.groupRevision;
+    ++this.territoryRevision;
+    ++this.supportRevision;
   }
   private label(input: HTMLInputElement, text: string): HTMLLabelElement {
     const label = document.createElement("label");
@@ -359,6 +384,7 @@ export class AddressWizard {
     this.house.setOptions([]);
     this.building.value = "";
     this.operator.setOptions([]);
+    void this.refreshLookupSupport();
     this.groupOptions = [];
     ++this.groupRevision;
     this.clearGroup();
@@ -404,6 +430,7 @@ export class AddressWizard {
     const revision = ++this.territoryRevision;
     if (districtChanged) this.community.setOptions([]);
     this.city.setOptions([]);
+    void this.refreshLookupSupport();
     this.street.setOptions([]);
     this.house.setOptions([]);
     this.building.value = "";
@@ -448,6 +475,7 @@ export class AddressWizard {
     const revision = ++this.groupRevision;
     this.groupOptions = [];
     this.clearGroup();
+    void this.refreshLookupSupport();
     this.updateSave();
     if (!entry) return;
     this.lookup("street");
@@ -461,6 +489,25 @@ export class AddressWizard {
       if (revision === this.groupRevision) this.showError(error);
     }
     this.updateSave();
+  }
+  private async refreshLookupSupport(): Promise<void> {
+    const revision = ++this.supportRevision;
+    this.lookupSupported = null;
+    this.updateSave();
+    const operator = this.operator.value;
+    const city = this.city.value;
+    if (!operator || !city) return;
+    try {
+      const supported = await this.catalog.lookupSupport({
+        operatorId: operator.id,
+        settlementId: city.id,
+      });
+      if (revision === this.supportRevision && this.form.isConnected)
+        this.lookupSupported = supported;
+    } catch {
+      if (revision === this.supportRevision) this.lookupSupported = false;
+    }
+    if (revision === this.supportRevision) this.updateSave();
   }
   private addressInput() {
     const house =
@@ -493,6 +540,7 @@ export class AddressWizard {
     if (
       this.resolvingGroup ||
       !operator ||
+      this.lookupSupported !== true ||
       !city ||
       !this.street.input.value.trim() ||
       !this.house.input.value.trim() ||
@@ -503,6 +551,7 @@ export class AddressWizard {
     const revision = this.lookupRevision;
     const input = this.addressInput();
     this.resolvingGroup = true;
+    this.touched = true;
     this.clearGroup();
     this.updateSave();
     this.groupNote.textContent = uk.groupChecking;
@@ -685,10 +734,28 @@ export class AddressWizard {
       this.busy ||
       this.resolvingGroup ||
       !this.operator.value ||
+      this.lookupSupported !== true ||
       !this.city.value ||
       !this.street.input.value.trim() ||
       !this.house.input.value.trim() ||
       !!this.building.value.trim();
+    this.detectGroup.hidden =
+      !this.operator.value || this.lookupSupported === false;
+    this.lookupNote.textContent = !this.operator.value
+      ? uk.lookupChooseOperator
+      : !this.city.value
+        ? uk.lookupChooseSettlement
+        : this.lookupSupported === null
+          ? uk.lookupCheckingSupport
+          : !this.lookupSupported
+            ? uk.lookupUnsupported
+            : this.building.value.trim()
+              ? uk.lookupBuildingUnsupported
+              : !this.street.input.value.trim() ||
+                  !this.house.input.value.trim()
+                ? uk.lookupCompleteAddress
+                : "";
+    this.lookupNote.hidden = !this.lookupNote.textContent;
   }
   private showError(error: unknown): void {
     const code = errorCode(error);
@@ -705,30 +772,30 @@ export class AddressWizard {
     this.save.textContent = uk.saving;
     this.message.hidden = true;
     try {
-      this.onSaved(
-        await this.catalog.save({
-          ...(this.geographic() ? { geographic: this.geographic() } : {}),
-          streetId:
-            !this.street.value?.id.startsWith("geo:") &&
-            !this.building.value.trim() &&
-            this.house.value
-              ? (this.street.value?.id ?? null)
-              : null,
-          houseId:
-            !this.house.value?.id.startsWith("geo:") &&
-            !this.building.value.trim() &&
-            this.street.value
-              ? (this.house.value?.id ?? null)
-              : null,
-          operatorId: this.operator.value?.id ?? null,
-          queue: this.matchedGroup ? null : (this.group.value?.id ?? null),
-          input: this.addressInput(),
-          oblastId: this.oblast.value?.id ?? null,
-          settlementId: this.city.value?.id ?? null,
-          label: this.name.value.trim(),
-          editingId: this.initial?.id ?? null,
-        }),
-      );
+      const state = await this.catalog.save({
+        ...(this.geographic() ? { geographic: this.geographic() } : {}),
+        streetId:
+          !this.street.value?.id.startsWith("geo:") &&
+          !this.building.value.trim() &&
+          this.house.value
+            ? (this.street.value?.id ?? null)
+            : null,
+        houseId:
+          !this.house.value?.id.startsWith("geo:") &&
+          !this.building.value.trim() &&
+          this.street.value
+            ? (this.house.value?.id ?? null)
+            : null,
+        operatorId: this.operator.value?.id ?? null,
+        queue: this.matchedGroup ? null : (this.group.value?.id ?? null),
+        input: this.addressInput(),
+        oblastId: this.oblast.value?.id ?? null,
+        settlementId: this.city.value?.id ?? null,
+        label: this.name.value.trim(),
+        editingId: this.initial?.id ?? null,
+      });
+      this.touched = false;
+      this.onSaved(state);
     } catch (error) {
       this.showError(error);
     } finally {

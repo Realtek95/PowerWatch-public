@@ -40,30 +40,47 @@ fn choose_city(entries: &[Entry], name: &str) -> Option<u64> {
 }
 fn street_parts(value: &str) -> (Option<&'static str>, String) {
     let normalized = value
+        .replace(['’', 'ʼ', '`'], "'")
+        .replace(['–', '—', '‑'], "-")
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
         .to_lowercase();
     for (prefix, kind) in [
-        ("вулиця ", "street"),
-        ("вул.", "street"),
-        ("площа ", "square"),
-        ("пл.", "square"),
-        ("проспект ", "avenue"),
-        ("просп.", "avenue"),
-        ("пр-т ", "avenue"),
-        ("провулок ", "lane"),
-        ("пров.", "lane"),
-        ("бульвар ", "boulevard"),
-        ("бул.", "boulevard"),
-        ("узвіз ", "descent"),
-        ("набережна ", "embankment"),
+        ("вулиця", "street"),
+        ("вул", "street"),
+        ("площа", "square"),
+        ("пл", "square"),
+        ("проспект", "avenue"),
+        ("просп", "avenue"),
+        ("пр-т", "avenue"),
+        ("провулок", "lane"),
+        ("пров", "lane"),
+        ("бульвар", "boulevard"),
+        ("бул", "boulevard"),
+        ("узвіз", "descent"),
+        ("набережна", "embankment"),
+        ("шосе", "highway"),
+        ("тупик", "dead_end"),
+        ("проїзд", "drive"),
     ] {
-        if let Some(name) = normalized.strip_prefix(prefix) {
-            return (Some(kind), name.trim_start().into());
+        if let Some(name) = normalized.strip_prefix(prefix)
+            && (name.is_empty() || name.starts_with(char::is_whitespace) || name.starts_with('.'))
+        {
+            return (Some(kind), name.trim_start_matches('.').trim_start().into());
         }
     }
     (None, normalized)
+}
+pub(super) fn street_query(value: &str) -> String {
+    street_parts(value).1
+}
+pub(super) fn street_suggestion_matches(candidate: &str, query: &str) -> bool {
+    let (kind, name) = street_parts(candidate);
+    let (query_kind, query_name) = street_parts(query);
+    !query_name.is_empty()
+        && (kind.is_none() || query_kind.is_none() || kind == query_kind)
+        && (name.contains(&query_name) || same_person_name(&name, &query_name))
 }
 fn same_person_name(left: &str, right: &str) -> bool {
     let left: Vec<_> = left.split_whitespace().collect();
@@ -151,12 +168,23 @@ pub fn resolve(
         now,
     )
 }
+/// Local coverage only. This check must never contact an operator's website.
+pub(super) fn supports(operator: &str, settlement: &str) -> bool {
+    registry::find(operator).is_some_and(|record| record.yasno.is_some())
+        && ((operator == "ua.dso.dtek-kem" && settlement == "UA80000000000093317")
+            || (["ua.dso.dtek-dnem", "ua.dso.cek-dnipro"].contains(&operator)
+                && crate::catalog::unique_settlement_name("UA12000000000090473", settlement)
+                    .is_some()))
+}
 fn scope(
     http: &HttpClient,
     operator_id: &str,
     settlement_id: &str,
     now: DateTime<Utc>,
 ) -> Result<Option<Scope>, FetchError> {
+    if !supports(operator_id, settlement_id) {
+        return Ok(None);
+    }
     let Some(record) = registry::find(operator_id) else {
         return Ok(None);
     };
@@ -202,17 +230,18 @@ pub fn streets(
     query: &str,
     now: DateTime<Utc>,
 ) -> Result<Vec<CatalogEntry>, FetchError> {
-    if query.trim().chars().count() < 3 {
-        return Ok(Vec::new());
-    }
     if query.chars().count() > 200 || query.chars().any(char::is_control) {
         return Err(FetchError::InvalidData);
+    }
+    let query = street_query(query);
+    if query.chars().count() < 3 {
+        return Ok(Vec::new());
     }
     let Some(scope) = scope(http, operator_id, settlement_id, now)? else {
         return Ok(Vec::new());
     };
     let mut url = url(&scope, "streets")?;
-    url.query_pairs_mut().append_pair("query", query.trim());
+    url.query_pairs_mut().append_pair("query", &query);
     let entries: Vec<Entry> = http.json(url.as_str(), now)?;
     Ok(entries
         .into_iter()

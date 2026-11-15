@@ -20,6 +20,7 @@ export class Autocomplete {
   private active = -1;
   private remoteOptions = false;
   private pending = false;
+  private dismissed = true;
 
   constructor(
     id: string,
@@ -50,9 +51,10 @@ export class Autocomplete {
       this.remoteOptions = false;
       this.onChange(null);
       this.active = -1;
-      this.show();
+      this.open();
     });
-    this.input.addEventListener("focus", () => this.show());
+    this.input.addEventListener("focus", () => this.open());
+    this.input.addEventListener("pointerdown", () => this.open());
     this.input.addEventListener("blur", () => this.close());
     this.input.addEventListener("keydown", (event) => this.keydown(event));
     this.list.addEventListener("pointerdown", (event) =>
@@ -66,8 +68,7 @@ export class Autocomplete {
         (item) => item.id === option?.dataset.option,
       );
       if (entry) {
-        this.select(entry.id);
-        this.onChange(entry);
+        this.choose(entry);
       }
     });
   }
@@ -103,13 +104,24 @@ export class Autocomplete {
         options.find((entry) => entry.id === this.selected?.id)) ||
       null;
     this.active = -1;
-    if (document.activeElement === this.input) this.show();
+    if (!this.dismissed && document.activeElement === this.input) this.show();
   }
 
   setLoading(pending: boolean): void {
     this.pending = pending;
     this.input.setAttribute("aria-busy", String(pending));
-    if (document.activeElement === this.input) this.show();
+    if (!this.dismissed && document.activeElement === this.input) this.show();
+  }
+
+  private open(): void {
+    this.dismissed = false;
+    this.show();
+  }
+
+  private choose(entry: CatalogEntry): void {
+    this.select(entry.id);
+    this.onChange(entry);
+    this.element.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
   private show(): void {
@@ -158,6 +170,7 @@ export class Autocomplete {
   }
 
   private close(): void {
+    this.dismissed = true;
     this.list.hidden = true;
     this.input.setAttribute("aria-expanded", "false");
     this.input.removeAttribute("aria-activedescendant");
@@ -192,8 +205,7 @@ export class Autocomplete {
       event.preventDefault();
       const entry = this.matches[this.active];
       if (entry) {
-        this.select(entry.id);
-        this.onChange(entry);
+        this.choose(entry);
       }
       return;
     }
@@ -201,7 +213,7 @@ export class Autocomplete {
     event.preventDefault();
     if (this.list.hidden) {
       this.active = -1;
-      this.show();
+      this.open();
     }
     if (!this.matches.length) return;
     this.active =
