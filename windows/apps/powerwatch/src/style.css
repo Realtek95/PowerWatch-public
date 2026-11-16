@@ -2390,3 +2390,12 @@ dialog::backdrop {
     width: 32px;
   }
 }
+
+.status-card.emergency {
+  background: var(--subtle);
+  border: 1px solid #b78625;
+}
+.status-card.emergency .status-icon {
+  background: #b78625;
+  color: #fff;
+}

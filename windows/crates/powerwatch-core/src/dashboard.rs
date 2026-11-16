@@ -71,32 +71,19 @@ pub fn build_dashboard(
     date: NaiveDate,
     now: DateTime<Utc>,
 ) -> Result<Dashboard, CoreError> {
-    let display_days = if snapshot
-        .plan_suspensions
-        .iter()
-        .any(|notice| notice.date == date)
-    {
-        snapshot.queue_days.as_ref().unwrap_or(&snapshot.days)
-    } else {
-        &snapshot.days
-    };
+    let display_days: Vec<_> = snapshot.planned_days().cloned().collect();
     let day = display_days
         .iter()
         .find(|day| day.date == date)
         .ok_or(CoreError::MissingDay)?
         .clone();
-    let current_state = snapshot
-        .days
+    let current_state = display_days
         .iter()
         .flat_map(|day| &day.intervals)
         .find(|item| item.start <= now && now < item.end)
         .map_or(ScheduleState::Unknown, |item| item.state);
     let mut outages: Vec<ScheduleInterval> = Vec::new();
-    let mut source_intervals: Vec<_> = snapshot
-        .days
-        .iter()
-        .flat_map(|day| &day.intervals)
-        .collect();
+    let mut source_intervals: Vec<_> = display_days.iter().flat_map(|day| &day.intervals).collect();
     source_intervals.sort_by_key(|item| item.start);
     for item in source_intervals
         .iter()

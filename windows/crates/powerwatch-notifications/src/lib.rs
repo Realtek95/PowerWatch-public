@@ -202,12 +202,9 @@ impl PlannedNotification {
                 _ => true,
             };
         };
-        let periods = outage_periods(&snapshot.days);
-        let intervals: Vec<_> = snapshot
-            .days
-            .iter()
-            .flat_map(|day| &day.intervals)
-            .collect();
+        let planned_days: Vec<_> = snapshot.planned_days().cloned().collect();
+        let periods = outage_periods(&planned_days);
+        let intervals: Vec<_> = planned_days.iter().flat_map(|day| &day.intervals).collect();
         match self.kind {
             NotificationKind::ForecastEnd => {
                 periods.iter().any(|period| period.end == boundary)
@@ -312,12 +309,9 @@ pub fn plan_with_reference(
         return Ok(Vec::new());
     }
     let mut plans = Vec::new();
-    let parts: Vec<_> = snapshot
-        .days
-        .iter()
-        .flat_map(|day| &day.intervals)
-        .collect();
-    for outage in outage_periods(&snapshot.days)
+    let planned_days: Vec<_> = snapshot.planned_days().cloned().collect();
+    let parts: Vec<_> = planned_days.iter().flat_map(|day| &day.intervals).collect();
+    for outage in outage_periods(&planned_days)
         .into_iter()
         .filter(|_| forecast_current)
     {

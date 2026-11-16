@@ -45,6 +45,7 @@ import { DialogDismissal } from "./components/dialog";
 import { createHelpPage } from "./components/help";
 import { aboutMarkup, sourcesMarkup, privacyMarkup } from "./components/about";
 import { evidenceMarkup } from "./components/evidence";
+import { emergencyNow, statusMarkup } from "./components/status";
 import { updateMarkup } from "./components/updates";
 import {
   diagnosticsMarkup,
@@ -171,7 +172,6 @@ function scheduleMarkup(value: Dashboard, archiveMode = false): string {
   return `<section class="card schedule-card" aria-labelledby="schedule-title">
     <div class="section-heading"><h2 id="schedule-title">${icon("calendar")}${uk.schedule}</h2>${archiveMode ? "" : `<div class="day-tabs" role="group" aria-label="${uk.schedule}">${[uk.today, uk.tomorrow].map((name, i) => `<button data-day="${i}" aria-pressed="${dayOffset === i}" class="${dayOffset === i ? "selected" : ""}">${name}</button>`).join("")}</div>`}</div>
     <div class="schedule-toolbar"><span>${html(formatDate(value.selectedDay.date))}</span><div class="view-tabs"><button data-mode="scale" aria-pressed="${mode === "scale"}">${uk.scale}</button><button data-mode="list" aria-pressed="${mode === "list"}">${uk.list}</button></div></div>
-    ${value.snapshot.planSuspensions?.some((notice) => notice.date === value.selectedDay.date) ? `<p class="notice">${uk.suspendedPlan}</p>` : ""}
     ${value.clockChange ? `<p class="notice">${uk.clockChange}</p>` : ""}
     ${
       mode === "scale"
@@ -365,7 +365,7 @@ function render(): void {
                         : `
       ${
         page === "home"
-          ? `<section class="status-card ${degraded ? "unknown" : value.currentState}"><span class="status-icon">${icon(value.currentState === "unknown" || degraded ? "info" : "zap")}</span><div><h2>${uk.statuses[value.currentState]}</h2><p>${degraded ? uk.cachedForecast : uk.forecastNote}</p></div></section>${sourceReportMarkup(value)}
+          ? `${statusMarkup(value, degraded, currentNow())}${!emergencyNow(value, currentNow()) || value.snapshot.addressCheck?.event ? sourceReportMarkup(value) : ""}
       <section class="card next-event"><div class="event-icon">${icon("calendar")}</div><div class="event-content"><p>${uk.nextEvent}</p><h2 data-event-title>${html(event?.title ?? "")}</h2><span data-event-detail>${icon("clock")}${html(event?.detail ?? "")}</span></div><div class="countdown" data-countdown ${event?.countdown ? "" : "hidden"}>${event?.countdown ?? ""}</div></section>
       <div class="freshness"><span title="${html(formatMoment(value.snapshot.receivedAt))}">${icon("refresh")}${uk.updated}: <b>${formatTime(value.snapshot.receivedAt)}</b></span><span class="freshness-badge ${degraded || incomplete || !!errorCode ? "failed" : ""}">${icon(degraded || incomplete || !!errorCode ? "info" : "check")}${refreshQueued ? uk.refreshQueued : errorCode ? (value.retryPending ? uk.retryPending : uk.checkFailed) : value.freshness.status === "clock_mismatch" ? uk.clockMismatch : degraded ? uk.staleData : incomplete ? uk.partial : uk.currentData}</span></div><p class="freshness-detail">${uk.dataAge}: <span data-age>${formatDuration(value.freshness.ageSeconds)}</span>${value.snapshot.publishedAt ? ` · ${uk.published}: ${html(formatMoment(value.snapshot.publishedAt))}` : ""}</p>`
           : ""
@@ -478,7 +478,7 @@ async function runUpdateInstallation(): Promise<void> {
   installingUpdate = true;
   showDialog(
     uk.updateTitle,
-    `<p>${uk.updateDownload}</p><progress id="update-progress" max="100" value="0" aria-label="${uk.updateDownload}"></progress>`,
+    `<p id="update-phase">${uk.updateDownload}</p><progress id="update-progress" max="100" value="0" aria-label="${uk.updateDownload}"></progress>`,
   );
   const version = dialogVersion;
   try {
@@ -492,7 +492,7 @@ async function runUpdateInstallation(): Promise<void> {
     if (version === dialogVersion) {
       const code = commandErrorCode(error) as keyof typeof uk.errors;
       document.querySelector("#dialog-content")!.innerHTML =
-        `<p>${uk.errors[code] ?? uk.errors.internal_error}</p>`;
+        `<p>${uk.errors[code] ?? uk.errors.internal_error}</p><div class="form-actions"><button class="primary-button" data-action="${code === "update_expired" ? "check-updates" : "install-update"}">${code === "update_expired" ? uk.updateTitle : uk.updateRetry}</button></div>`;
     }
   } finally {
     installingUpdate = false;
@@ -985,6 +985,18 @@ setInterval(() => {
 
 if (isTauri()) {
   setInterval(() => void checkForUpdates(true), 3_600_000);
+  void listen<string>("update-phase", ({ payload }) => {
+    const label = document.querySelector("#update-phase");
+    if (label)
+      label.textContent =
+        payload === "waiting"
+          ? uk.updateWaiting
+          : payload === "verifying"
+            ? uk.updateVerifying
+            : payload === "installing"
+              ? uk.updateInstalling
+              : uk.updateDownload;
+  });
   void listen<number>("update-progress", ({ payload }) => {
     const progress =
       document.querySelector<HTMLProgressElement>("#update-progress");

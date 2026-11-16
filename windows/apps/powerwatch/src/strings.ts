@@ -191,7 +191,11 @@ export const uk = {
   updateAvailable: "Доступна нова версія",
   updateSize: "Розмір завантаження",
   updateInstall: "Завантажити й установити",
-  updateDownload: "Завантажуємо та перевіряємо оновлення…",
+  updateDownload: "Завантаження оновлення…",
+  updateWaiting: "З’єднання перервано. Відновлюємо завантаження…",
+  updateVerifying: "Перевірка файлу оновлення…",
+  updateInstalling: "Відкриваємо встановлення…",
+  updateRetry: "Продовжити завантаження",
   updateCurrent: "У вас актуальна версія.",
   updateSkipped: "Перевірку вже виконано. Повторіть за хвилину.",
   updateConsentWindows:
@@ -345,6 +349,9 @@ export const uk = {
   noOutages: "Відключень не заплановано",
   uncertainEvent: "Наступну подію ще не визначено",
   forecastNote: "За графіком оператора",
+  emergencyTitle: "Діють аварійні відключення",
+  emergencyPlan: "Графік є, але може не діяти.",
+  emergencyNoPlan: "Графік недоступний.",
   suspendedPlan:
     "Плановий графік. Під час аварійного режиму він може не діяти.",
   actualPowerNote: "Фактичне живлення не вимірюється",

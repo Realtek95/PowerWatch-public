@@ -1,6 +1,7 @@
 //! Signed release metadata shared by desktop and Android. No user database or
 //! installation API: callers decide when to check and ask consent to install.
 pub mod cache;
+mod transfer;
 mod transport;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::{DateTime, TimeDelta, Utc};
@@ -9,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use thiserror::Error;
+pub use transfer::TransferStage;
 pub use transport::ReleaseClient;
 pub const MAX_MANIFEST: u64 = 262_144;
 pub const MAX_PACKAGE: u64 = 524_288_000;

@@ -63,8 +63,8 @@ pub struct PlanSuspension {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScheduleSnapshot {
-    /// Published plan remains visible, but these dates are not applicable to
-    /// current-state predictions or reminders during an emergency regime.
+    /// Emergency applicability is a warning; the published calendar remains
+    /// the basis for explicitly planned states, events and reminders.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plan_suspensions: Vec<PlanSuspension>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -86,6 +86,26 @@ pub struct ScheduleSnapshot {
     pub reason: Option<String>,
     pub expected_restoration: Option<DateTime<Utc>>,
     pub days: Vec<DaySchedule>,
+}
+impl ScheduleSnapshot {
+    /// Preserve real address overrides except on dates explicitly marked as
+    /// emergency-suspended. Never synthesize a missing calendar from a notice.
+    pub fn planned_days(&self) -> impl Iterator<Item = &DaySchedule> {
+        self.days.iter().map(|day| {
+            if self
+                .plan_suspensions
+                .iter()
+                .any(|notice| notice.date == day.date)
+            {
+                self.queue_days
+                    .as_ref()
+                    .and_then(|days| days.iter().find(|plan| plan.date == day.date))
+                    .unwrap_or(day)
+            } else {
+                day
+            }
+        })
+    }
 }
 /// Fill gaps with Unknown, reject overlaps, then merge equivalent neighbours.
 /// Clipping for a day is a view operation; source intervals remain unsplit.

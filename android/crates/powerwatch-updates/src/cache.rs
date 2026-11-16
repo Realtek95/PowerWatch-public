@@ -12,10 +12,20 @@ fn version(path: &Path) -> Option<semver::Version> {
         return None;
     }
     let (release, sequence) = path.file_stem()?.to_str()?.rsplit_once('-')?;
-    if sequence.is_empty() || !sequence.bytes().all(|byte| byte.is_ascii_digit()) {
+    if sequence.is_empty()
+        || !(sequence.bytes().all(|byte| byte.is_ascii_digit())
+            || (sequence.len() == 64 && sequence.bytes().all(|byte| byte.is_ascii_hexdigit())))
+    {
         return None;
     }
     semver::Version::parse(release).ok()
+}
+fn base_path(path: &Path) -> PathBuf {
+    if path.extension().is_some_and(|ext| ext == "part") {
+        path.with_extension("")
+    } else {
+        path.to_owned()
+    }
 }
 /// Installed/older packages are unnecessary. Keep at most one future installer
 /// for seven days, or the explicitly retained package being handed to the OS.
@@ -39,7 +49,15 @@ pub fn prune_installers(
             continue;
         }
         let path = entry.path();
-        let Some(release) = version(&path) else {
+        let base = if path
+            .extension()
+            .is_some_and(|extension| extension == "part")
+        {
+            path.with_extension("")
+        } else {
+            path.clone()
+        };
+        let Some(release) = version(&base) else {
             continue;
         };
         let metadata = entry.metadata()?;
@@ -49,7 +67,7 @@ pub fn prune_installers(
     let mut retained = keep.is_some();
     let mut freed = 0;
     for (path, release, modified, length) in files {
-        if keep == Some(path.as_path()) {
+        if keep == Some(path.as_path()) || keep == Some(base_path(&path).as_path()) {
             continue;
         }
         let expired =

@@ -39,6 +39,7 @@ pub fn maintain_cache(app: &tauri::AppHandle) {
 #[derive(Default)]
 struct Inner {
     busy: bool,
+    failed_download: bool,
     pending: Option<Pending>,
     downloaded: Option<std::path::PathBuf>,
 }
@@ -110,6 +111,23 @@ fn check(
 ) -> Result<UpdateResult, CommandError> {
     maintain_cache(app);
     let now = Utc::now();
+    if !automatic {
+        let state = app.state::<UpdateState>();
+        let inner = state.0.lock().map_err(|_| CommandError {
+            code: "internal_error",
+        })?;
+        if let Some(pending) = &inner.pending
+            && now - pending.checked_at < TimeDelta::minutes(30)
+        {
+            let asset = &pending.manifest.platforms[&pending.platform];
+            return Ok(UpdateResult {
+                status: "available",
+                version: Some(pending.manifest.version.clone()),
+                notes: Some(pending.manifest.notes.clone()),
+                size: Some(asset.size),
+            });
+        }
+    }
     {
         let state = app.state::<AppState>();
         let repo = state.repo()?;
@@ -142,13 +160,6 @@ fn check(
         }
         repo.store.set_setting("last_update_check", &now)?;
     }
-    app.state::<UpdateState>()
-        .0
-        .lock()
-        .map_err(|_| CommandError {
-            code: "internal_error",
-        })?
-        .pending = None;
     let manifest = match ReleaseClient::new()?.check(&configuration, now) {
         Err(UpdateError::RateLimited(until)) => {
             app.state::<AppState>()
@@ -208,6 +219,7 @@ fn check(
         let mut inner = state.0.lock().map_err(|_| CommandError {
             code: "internal_error",
         })?;
+        inner.failed_download = false;
         inner.pending = Some(Pending {
             manifest,
             platform,
@@ -244,6 +256,10 @@ pub async fn install_update(app: tauri::AppHandle) -> Result<&'static str, Comma
             code: "internal_error",
         }),
     };
+    if result.is_ok() {
+        let _ = app.emit("update-progress", 100_u64);
+        let _ = app.emit("update-phase", "installing");
+    }
     let result = result.and_then(|(pending, path)| {
         let asset = &pending.manifest.platforms[&pending.platform];
         crate::android::install_update(&app, &path, asset.version_code.unwrap(), &asset.sha256)
@@ -255,13 +271,15 @@ pub async fn install_update(app: tauri::AppHandle) -> Result<&'static str, Comma
 fn reserve_download(
     store: &powerwatch_storage::Store,
     now: DateTime<Utc>,
+    continuing: bool,
 ) -> Result<(), CommandError> {
     if store
         .setting::<DateTime<Utc>>("update_pause_until")?
         .is_some_and(|until| until > now)
-        || store
-            .setting::<DateTime<Utc>>("last_update_download_attempt")?
-            .is_some_and(|last| now - last < TimeDelta::seconds(60))
+        || (!continuing
+            && store
+                .setting::<DateTime<Utc>>("last_update_download_attempt")?
+                .is_some_and(|last| now - last < TimeDelta::seconds(60)))
     {
         return Err(CommandError {
             code: "update_rate_limited",
@@ -313,8 +331,6 @@ fn download(
             .downloaded = Some(path.clone());
         return Ok((pending.clone(), path));
     }
-    reserve_download(&app.state::<AppState>().repo()?.store, Utc::now())?;
-    maintain_cache(app);
     let extension = if pending.platform.starts_with("android") {
         "apk"
     } else {
@@ -323,9 +339,28 @@ fn download(
     let path = directory.join(format!(
         "{}-{}.{}",
         pending.manifest.version,
-        Utc::now().timestamp_micros(),
+        asset.sha256.to_ascii_lowercase(),
         extension
     ));
+    let partial = path.with_extension(format!("{extension}.part"));
+    reserve_download(
+        &app.state::<AppState>().repo()?.store,
+        Utc::now(),
+        partial.is_file()
+            || app
+                .state::<UpdateState>()
+                .0
+                .lock()
+                .map_err(|_| CommandError {
+                    code: "internal_error",
+                })?
+                .failed_download,
+    )?;
+    if std::fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_file()) {
+        std::fs::remove_file(&path).map_err(|_| CommandError {
+            code: "storage_error",
+        })?;
+    }
     let _ = powerwatch_updates::cache::prune_installers(
         &directory,
         env!("CARGO_PKG_VERSION"),
@@ -333,20 +368,39 @@ fn download(
         std::time::SystemTime::now(),
     );
     let mut percent = 0;
-    let downloaded =
-        ReleaseClient::new()?.download(asset, &config()?.repository, &path, |received, total| {
-            let current = received * 100 / total;
+    let downloaded = ReleaseClient::new()?.download_with_status(
+        asset,
+        &config()?.repository,
+        &path,
+        |received, total| {
+            let current = (received * 100 / total).min(99);
             if current != percent {
                 percent = current;
                 let _ = app.emit("update-progress", current);
             }
-        });
+        },
+        |stage| {
+            let phase = match stage {
+                powerwatch_updates::TransferStage::Downloading => "downloading",
+                powerwatch_updates::TransferStage::Waiting => "waiting",
+                powerwatch_updates::TransferStage::Verifying => "verifying",
+            };
+            let _ = app.emit("update-phase", phase);
+        },
+    );
     if let Err(UpdateError::RateLimited(until)) = &downloaded {
         app.state::<AppState>()
             .repo()?
             .store
             .set_setting("update_pause_until", until)?;
     }
+    app.state::<UpdateState>()
+        .0
+        .lock()
+        .map_err(|_| CommandError {
+            code: "internal_error",
+        })?
+        .failed_download = downloaded.is_err();
     downloaded?;
     app.state::<UpdateState>()
         .0

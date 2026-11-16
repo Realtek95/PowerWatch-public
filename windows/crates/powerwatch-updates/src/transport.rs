@@ -1,11 +1,7 @@
 use crate::*;
 use reqwest::{StatusCode, blocking::Client, redirect::Policy};
-use std::{
-    io::{Read, Write},
-    path::Path,
-    time::Duration,
-};
-pub struct ReleaseClient(Client);
+use std::{io::Read, time::Duration};
+pub struct ReleaseClient(pub(crate) Client);
 impl ReleaseClient {
     pub fn new() -> Result<Self, UpdateError> {
         let tls = rustls::ClientConfig::builder_with_provider(std::sync::Arc::new(
@@ -59,8 +55,15 @@ impl ReleaseClient {
             .timeout(timeout)
             .send()
             .map_err(|_| UpdateError::Network)?;
+        Self::checked_response(response, false)
+    }
+    pub(crate) fn checked_response(
+        response: reqwest::blocking::Response,
+        partial: bool,
+    ) -> Result<reqwest::blocking::Response, UpdateError> {
         match response.status() {
             StatusCode::OK => Ok(response),
+            StatusCode::PARTIAL_CONTENT if partial => Ok(response),
             StatusCode::TOO_MANY_REQUESTS | StatusCode::SERVICE_UNAVAILABLE => {
                 let now = Utc::now();
                 let retry = response
@@ -99,61 +102,5 @@ impl ReleaseClient {
             .read_to_end(&mut body)
             .map_err(|_| UpdateError::Network)?;
         verify_manifest(&body, config, now)
-    }
-    pub fn download(
-        &self,
-        asset: &ReleaseAsset,
-        repository: &str,
-        path: &Path,
-        mut progress: impl FnMut(u64, u64),
-    ) -> Result<(), UpdateError> {
-        if !valid_asset_url(&asset.url, repository) || asset.size > MAX_PACKAGE {
-            return Err(UpdateError::Invalid);
-        }
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(path)
-            .map_err(|_| UpdateError::Storage)?;
-        let result = (|| {
-            let mut response = self.response(&asset.url, Duration::from_secs(300))?;
-            if response
-                .content_length()
-                .is_some_and(|length| length != asset.size)
-            {
-                return Err(UpdateError::Integrity);
-            }
-            let mut hash = Sha256::new();
-            let mut size = 0;
-            let mut buffer = [0; 65_536];
-            loop {
-                let count = response
-                    .read(&mut buffer)
-                    .map_err(|_| UpdateError::Network)?;
-                if count == 0 {
-                    break;
-                }
-                size += count as u64;
-                if size > asset.size {
-                    return Err(UpdateError::Integrity);
-                }
-                hash.update(&buffer[..count]);
-                file.write_all(&buffer[..count])
-                    .map_err(|_| UpdateError::Storage)?;
-                progress(size, asset.size);
-            }
-            if size != asset.size
-                || format!("{:x}", hash.finalize()) != asset.sha256.to_ascii_lowercase()
-            {
-                return Err(UpdateError::Integrity);
-            }
-            file.sync_all().map_err(|_| UpdateError::Storage)?;
-            Ok(())
-        })();
-        drop(file);
-        if result.is_err() {
-            let _ = std::fs::remove_file(path);
-        }
-        result
     }
 }
