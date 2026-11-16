@@ -26,6 +26,7 @@ pub fn tick_with_source(
     source: &dyn SnapshotSource,
 ) -> Result<TickResult, StorageError> {
     let wall = now;
+    let _ = store.maintain(now);
     store.cancel_invalid_notification_plans(now)?;
     store.reconcile(now)?;
     let session = store.load_book()?.state();
@@ -126,6 +127,18 @@ pub fn tick_with_source(
             return Ok(TickResult {
                 checked: None,
                 next_delay_seconds: delay(now, allowed),
+            });
+        }
+        if manual.is_none()
+            && let Some(state) = store
+                .poll_states()?
+                .iter()
+                .find(|state| state.address_key == key)
+            && state.due_at > now
+        {
+            return Ok(TickResult {
+                checked: None,
+                next_delay_seconds: delay(now, state.due_at),
             });
         }
         let started = std::time::Instant::now();

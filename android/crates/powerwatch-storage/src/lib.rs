@@ -2,6 +2,7 @@
 //! normalized data is validated before replacing a trusted snapshot.
 mod archive;
 mod http_policy;
+mod maintenance;
 mod notifications;
 pub use archive::{ArchiveView, ChangeRecord, HistoryAddress};
 use chrono::{DateTime, Utc};

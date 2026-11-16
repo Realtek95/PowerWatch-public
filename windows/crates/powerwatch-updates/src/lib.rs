@@ -1,5 +1,6 @@
 //! Signed release metadata shared by desktop and Android. No user database or
 //! installation API: callers decide when to check and ask consent to install.
+pub mod cache;
 mod transport;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::{DateTime, TimeDelta, Utc};

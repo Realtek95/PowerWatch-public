@@ -781,7 +781,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let builder = builder.setup(|app| {
         let directory = app.path().app_data_dir()?;
         std::fs::create_dir_all(&directory)?;
-        let store = Store::open(directory.join("powerwatch-development.sqlite3"))?;
+        let mut store = Store::open(directory.join("powerwatch-development.sqlite3"))?;
+        let _ = store.maintain(Utc::now());
+        let _ = geography::prune_catalogs(&directory.join("address-catalog"));
         powerwatch_runtime::configure_http_policy(
             &directory.join("powerwatch-development.sqlite3"),
         )?;
@@ -802,6 +804,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             cache: Mutex::new(cache),
         });
         app.manage(updates::UpdateState::default());
+        updates::maintain_cache(app.handle());
         #[cfg(windows)]
         desktop::setup(app)?;
         #[cfg(target_os = "android")]

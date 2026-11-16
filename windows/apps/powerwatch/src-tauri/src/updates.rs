@@ -20,6 +20,22 @@ impl From<UpdateError> for CommandError {
 }
 #[derive(Default)]
 pub struct UpdateState(Mutex<Inner>);
+pub fn maintain_cache(app: &tauri::AppHandle) {
+    if let Ok(directory) = app.path().app_cache_dir() {
+        let keep = app
+            .state::<UpdateState>()
+            .0
+            .lock()
+            .ok()
+            .and_then(|inner| inner.downloaded.clone());
+        let _ = powerwatch_updates::cache::prune_installers(
+            &directory.join("updates"),
+            env!("CARGO_PKG_VERSION"),
+            keep.as_deref(),
+            std::time::SystemTime::now(),
+        );
+    }
+}
 #[derive(Default)]
 struct Inner {
     busy: bool,
@@ -92,6 +108,7 @@ fn check(
     configuration: UpdateConfig,
     automatic: bool,
 ) -> Result<UpdateResult, CommandError> {
+    maintain_cache(app);
     let now = Utc::now();
     {
         let state = app.state::<AppState>();
@@ -176,9 +193,7 @@ fn check(
             platform,
             checked_at: now,
         });
-        if let Some(path) = inner.downloaded.take() {
-            let _ = std::fs::remove_file(path);
-        }
+        inner.downloaded = None;
     }
     Ok(result)
 }
@@ -252,7 +267,6 @@ fn download(
     {
         return Ok((pending.clone(), path));
     }
-    reserve_download(&app.state::<AppState>().repo()?.store, Utc::now())?;
     let directory = app
         .path()
         .app_cache_dir()
@@ -264,6 +278,23 @@ fn download(
         code: "storage_error",
     })?;
     let asset = &pending.manifest.platforms[&pending.platform];
+    if let Some(path) =
+        powerwatch_updates::cache::cached_installer(&directory, &pending.manifest.version, asset)
+            .map_err(|_| CommandError {
+                code: "storage_error",
+            })?
+    {
+        app.state::<UpdateState>()
+            .0
+            .lock()
+            .map_err(|_| CommandError {
+                code: "internal_error",
+            })?
+            .downloaded = Some(path.clone());
+        return Ok((pending.clone(), path));
+    }
+    reserve_download(&app.state::<AppState>().repo()?.store, Utc::now())?;
+    maintain_cache(app);
     let extension = if pending.platform.starts_with("android") {
         "apk"
     } else {
@@ -275,6 +306,12 @@ fn download(
         Utc::now().timestamp_micros(),
         extension
     ));
+    let _ = powerwatch_updates::cache::prune_installers(
+        &directory,
+        env!("CARGO_PKG_VERSION"),
+        Some(&path),
+        std::time::SystemTime::now(),
+    );
     let mut percent = 0;
     let downloaded =
         ReleaseClient::new()?.download(asset, &config()?.repository, &path, |received, total| {
@@ -298,6 +335,7 @@ fn download(
             code: "internal_error",
         })?
         .downloaded = Some(path.clone());
+    maintain_cache(app);
     Ok((pending.clone(), path))
 }
 async fn install_windows(

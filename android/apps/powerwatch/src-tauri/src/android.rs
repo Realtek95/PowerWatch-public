@@ -158,6 +158,18 @@ fn execute(
     let now = wall;
     let args: Value = serde_json::from_str(payload)?;
     Ok(match operation {
+        "maintenance" => {
+            let _ = store.maintain(now);
+            if let Some(directory) = args["cacheDirectory"].as_str() {
+                let _ = powerwatch_updates::cache::prune_installers(
+                    &std::path::Path::new(directory).join("updates"),
+                    env!("CARGO_PKG_VERSION"),
+                    None,
+                    std::time::SystemTime::now(),
+                );
+            }
+            Value::Null
+        }
         "request-refresh" => {
             let book = store.load_book()?.state();
             if let Some(id) = book.active_address_id {

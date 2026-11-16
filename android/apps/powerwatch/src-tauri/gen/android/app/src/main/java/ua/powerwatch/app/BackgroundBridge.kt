@@ -62,20 +62,31 @@ object BackgroundBridge {
         WorkManager.getInstance(context).enqueueUniqueWork("powerwatch-local-pulse", policy, request)
     }
     fun enqueue(context: Context, delay: Long, policy: ExistingWorkPolicy) {
-        val request = OneTimeWorkRequestBuilder<MonitorWorker>().setConstraints(pollingConstraints()).setInitialDelay(delay.coerceAtLeast(0), TimeUnit.SECONDS).build()
+        val request = OneTimeWorkRequestBuilder<MonitorWorker>().setConstraints(pollingConstraints()).setInitialDelay(delay.coerceIn(0,900), TimeUnit.SECONDS).build()
         WorkManager.getInstance(context).enqueueUniqueWork("powerwatch-monitor", policy, request)
+    }
+    internal fun repairMonitor(context: Context, next: Long) {
+        val work=WorkManager.getInstance(context)
+        val unfinished=work.getWorkInfosForUniqueWork("powerwatch-monitor").get().filter{!it.state.isFinished}
+        // Do not cancel an HTTP request already in progress. A late old/night
+        // timer may be replaced, but every provider call still passes Rust's
+        // persisted due time, work window, host gates and cross-process lease.
+        if(unfinished.any{it.state==WorkInfo.State.RUNNING})return
+        val deadline=System.currentTimeMillis()+next.coerceIn(0,900)*1000+1000
+        val tooLate=unfinished.isNotEmpty() && unfinished.all{it.nextScheduleTimeMillis>deadline}
+        enqueue(context,next,if(tooLate)ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP)
     }
     fun run(context: Context, networkAvailable: Boolean = networkReady(context)): Long {
         // Deliver still-relevant local alarms before any potentially slow HTTP.
         syncAlarms(context)
         if (!networkAvailable) {
             PowerWatchWidget.updateAll(context)
-            return 15
+            return 900
         }
         val tick = call(context, "tick") as? JSONObject ?: return 900
         syncAlarms(context)
         PowerWatchWidget.updateAll(context)
-        return tick.optLong("nextDelaySeconds", 900).coerceAtLeast(5)
+        return tick.optLong("nextDelaySeconds", 900).coerceIn(5,900)
     }
     fun syncAlarms(context: Context) = ReminderAlarms.sync(context)
     @Synchronized fun deliver(context: Context, key: String) {
@@ -103,12 +114,19 @@ object BackgroundBridge {
 class MonitorWorker(context: Context, params: WorkerParameters): Worker(context,params) {
     override fun doWork(): Result = try {
         val next = BackgroundBridge.run(applicationContext)
-        BackgroundBridge.enqueue(applicationContext,next,ExistingWorkPolicy.APPEND_OR_REPLACE)
+        if(!isStopped)BackgroundBridge.enqueue(applicationContext,next,ExistingWorkPolicy.APPEND_OR_REPLACE)
         Result.success()
     } catch (error: Exception) { Log.e("PowerWatch","Local work failed",error); Result.retry() }
 }
 class PulseWorker(context: Context, params: WorkerParameters): Worker(context,params) {
-    override fun doWork(): Result = try { BackgroundBridge.syncAlarms(applicationContext);PowerWatchWidget.updateAll(applicationContext);BackgroundBridge.enqueue(applicationContext,0,ExistingWorkPolicy.KEEP);Result.success() }catch(error:Exception){Log.e("PowerWatch","Local widget pulse failed",error);Result.retry()}
+    override fun doWork(): Result = try {
+        // This independent periodic pulse must actually evaluate the schedule;
+        // KEEP alone cannot repair an existing delayed monitor chain.
+        BackgroundBridge.call(applicationContext,"maintenance",JSONObject().put("cacheDirectory",applicationContext.cacheDir.absolutePath))
+        val next=BackgroundBridge.run(applicationContext)
+        if(!isStopped)BackgroundBridge.repairMonitor(applicationContext,next)
+        Result.success()
+    } catch(error:Exception){Log.e("PowerWatch","Local recovery pulse failed",error);Result.retry()}
 }
 class ReminderReceiver: BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {

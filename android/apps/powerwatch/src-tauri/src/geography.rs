@@ -4,6 +4,48 @@ use powerwatch_addresses::{Catalog, CatalogError, CatalogManifest};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 include!(concat!(env!("OUT_DIR"), "/catalog_packages.rs"));
+/// Bundled immutable hashes identify live catalogs; old versions are disposable
+/// and can be reinstalled from bundled packages. Address records live elsewhere.
+pub fn prune_catalogs(directory: &Path) -> std::io::Result<()> {
+    let current: std::collections::HashSet<String> = PACKAGES
+        .iter()
+        .map(|(_, _, json)| {
+            serde_json::from_str::<CatalogManifest>(json)
+                .map(|manifest| format!("addresses-{}.sqlite3", manifest.sha256))
+                .map_err(std::io::Error::other)
+        })
+        .collect::<std::io::Result<_>>()?;
+    let entries = match std::fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    for entry in entries {
+        let entry = entry?;
+        if !entry.file_type()?.is_file() {
+            continue;
+        }
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        let Some(rest) = name.strip_prefix("addresses-") else {
+            continue;
+        };
+        let hash = rest.split(['.', '-']).next().unwrap_or_default();
+        if hash.len() != 64 || !hash.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            continue;
+        }
+        let obsolete = rest == format!("{hash}.sqlite3") && !current.contains(name);
+        let interrupted = name.ends_with(".part")
+            && entry.metadata()?.modified()?.elapsed().unwrap_or_default()
+                >= std::time::Duration::from_secs(86400);
+        if obsolete || interrupted {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+    Ok(())
+}
 impl From<CatalogError> for CommandError {
     fn from(error: CatalogError) -> Self {
         Self {

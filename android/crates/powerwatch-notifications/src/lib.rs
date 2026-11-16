@@ -402,9 +402,12 @@ pub fn plan_with_reference(
         && (forecast_current || address_current)
         && prefs.restoration_changes
         && !changed
-        && old.expected_restoration != snapshot.expected_restoration
-        && (snapshot.source_status != SourceStatus::Unknown
-            || snapshot.expected_restoration.is_some())
+        && old.source_status == SourceStatus::ReportedUnavailable
+        && snapshot.source_status == SourceStatus::ReportedUnavailable
+        && matches!(
+            (old.expected_restoration, snapshot.expected_restoration), (Some(before),
+            Some(after)) if before != after
+        )
     {
         plans.push(plan(
             (key, local_id),
