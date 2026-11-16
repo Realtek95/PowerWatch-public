@@ -51,7 +51,7 @@ pub fn parse(
             "WaitingForSchedule" => false,
             "EmergencyShutdowns" => {
                 emergency_dates.push(date);
-                false
+                day.slots.iter().any(|slot| slot.kind == "Definite")
             }
             _ => return Err(FetchError::InvalidData),
         };

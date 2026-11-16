@@ -590,7 +590,10 @@ async fn get_dashboard(
     };
     let fetched = {
         let address = saved.address.clone();
-        let previous = state.repo()?.store.cached(&address_key(&saved))?;
+        let previous = state
+            .repo()?
+            .store
+            .forecast_context(&address_key(&saved), Utc::now())?;
         tauri::async_runtime::spawn_blocking(move || -> Result<Dashboard, ProviderError> {
             if day_offset > 1 {
                 return Err(powerwatch_core::CoreError::MissingDay.into());

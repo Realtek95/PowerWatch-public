@@ -171,6 +171,7 @@ function scheduleMarkup(value: Dashboard, archiveMode = false): string {
   return `<section class="card schedule-card" aria-labelledby="schedule-title">
     <div class="section-heading"><h2 id="schedule-title">${icon("calendar")}${uk.schedule}</h2>${archiveMode ? "" : `<div class="day-tabs" role="group" aria-label="${uk.schedule}">${[uk.today, uk.tomorrow].map((name, i) => `<button data-day="${i}" aria-pressed="${dayOffset === i}" class="${dayOffset === i ? "selected" : ""}">${name}</button>`).join("")}</div>`}</div>
     <div class="schedule-toolbar"><span>${html(formatDate(value.selectedDay.date))}</span><div class="view-tabs"><button data-mode="scale" aria-pressed="${mode === "scale"}">${uk.scale}</button><button data-mode="list" aria-pressed="${mode === "list"}">${uk.list}</button></div></div>
+    ${value.snapshot.planSuspensions?.some((notice) => notice.date === value.selectedDay.date) ? `<p class="notice">${uk.suspendedPlan}</p>` : ""}
     ${value.clockChange ? `<p class="notice">${uk.clockChange}</p>` : ""}
     ${
       mode === "scale"

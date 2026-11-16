@@ -71,8 +71,16 @@ pub fn build_dashboard(
     date: NaiveDate,
     now: DateTime<Utc>,
 ) -> Result<Dashboard, CoreError> {
-    let day = snapshot
-        .days
+    let display_days = if snapshot
+        .plan_suspensions
+        .iter()
+        .any(|notice| notice.date == date)
+    {
+        snapshot.queue_days.as_ref().unwrap_or(&snapshot.days)
+    } else {
+        &snapshot.days
+    };
+    let day = display_days
         .iter()
         .find(|day| day.date == date)
         .ok_or(CoreError::MissingDay)?

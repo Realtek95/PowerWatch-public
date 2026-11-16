@@ -5,6 +5,7 @@ mod dtek_fact;
 pub mod mirror;
 mod retention;
 pub mod service;
+mod suspension;
 pub mod svitlopulse;
 pub mod yasno;
 use chrono::{DateTime, Utc};

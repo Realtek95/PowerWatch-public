@@ -1,6 +1,7 @@
 //! Local, source-partitioned SQLite repository. All writes use transactions;
 //! normalized data is validated before replacing a trusted snapshot.
 mod archive;
+mod history_identity;
 mod http_policy;
 mod maintenance;
 mod notifications;
@@ -195,6 +196,56 @@ impl Store {
             )
             .optional()?;
         value.map(|json| decode(&json)).transpose()
+    }
+    /// Context for a source refresh, never an assertion that an emergency ended.
+    /// Older published versions may have stored an entirely masked latest plan.
+    /// Recover a real same-address snapshot with its original proof/timestamps;
+    /// the new observation still decides applicability. Bound reads to 32 rows.
+    pub fn forecast_context(
+        &self,
+        key: &str,
+        now: DateTime<Utc>,
+    ) -> Result<Option<ScheduleSnapshot>> {
+        let Some(latest) = self.cached(key)? else {
+            return Ok(None);
+        };
+        let date = now
+            .with_timezone(&powerwatch_core::time::LOCAL_ZONE)
+            .date_naive();
+        let known = |snapshot: &ScheduleSnapshot| {
+            snapshot.received_at <= now
+                && snapshot
+                    .queue_days
+                    .as_ref()
+                    .unwrap_or(&snapshot.days)
+                    .iter()
+                    .any(|day| {
+                        day.date == date
+                            && day.intervals.iter().any(|part| {
+                                part.state != powerwatch_core::model::ScheduleState::Unknown
+                            })
+                    })
+        };
+        if known(&latest) {
+            return Ok(Some(latest));
+        }
+        let mut statement = self
+            .conn
+            .prepare(
+                "SELECT snapshot_json FROM snapshots WHERE address_key=?1 ORDER BY received_at DESC,id DESC LIMIT 32",
+            )?;
+        let rows = statement.query_map([key], |row| row.get::<_, String>(0))?;
+        for row in rows {
+            let snapshot: ScheduleSnapshot = decode(&row?)?;
+            if snapshot.provider_id == latest.provider_id
+                && snapshot.address.id == latest.address.id
+                && snapshot.address.queue == latest.address.queue
+                && known(&snapshot)
+            {
+                return Ok(Some(snapshot));
+            }
+        }
+        Ok(Some(latest))
     }
     /// Only source-confirmed automatic queues may change during a check. The
     /// book, current address metadata, snapshot and reminders commit together.

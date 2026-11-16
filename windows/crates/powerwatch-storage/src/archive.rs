@@ -170,7 +170,13 @@ impl Store {
                 })
             })
             .collect::<Result<_>>()?;
-        let selected = preferred
+        let preferred_current = preferred
+            .map(|key| self.current_history_key(key))
+            .transpose()?
+            .flatten();
+        let selected = preferred_current
+            .as_deref()
+            .or(preferred)
             .and_then(|key| addresses.iter().find(|entry| entry.key == key))
             .or_else(|| addresses.first());
         let selected_key = selected.map(|entry| entry.key.clone());
@@ -178,23 +184,43 @@ impl Store {
         let mut changes = Vec::new();
         let mut dashboard = None;
         if let Some(selected) = selected {
-            let rows: Vec<String> = self
+            let keys = self.history_keys(&selected.key)?;
+            let slots = vec!["?"; keys.len()].join(",");
+            let today = now.with_timezone(&LOCAL_ZONE).date_naive().to_string();
+            let mut values: Vec<&str> = keys.iter().map(String::as_str).collect();
+            values.push(&today);
+            let rows: Vec<(String, String)> = self
                 .conn
                 .prepare(
-                    "SELECT archive_json FROM daily_schedule_archive WHERE address_key=?1 AND date<?2 ORDER BY date DESC",
+                    &format!(
+                        "SELECT address_key,archive_json FROM daily_schedule_archive WHERE address_key IN ({slots}) AND date<? ORDER BY date DESC"
+                    ),
                 )?
                 .query_map(
-                    params![
-                        selected.key, now.with_timezone(& LOCAL_ZONE).date_naive()
-                        .to_string()
-                    ],
-                    |row| row.get(0),
+                    rusqlite::params_from_iter(values),
+                    |row| Ok((row.get(0)?, row.get(1)?)),
                 )?
                 .collect::<std::result::Result<_, _>>()?;
-            days = rows
-                .iter()
-                .map(|json| decode(json))
-                .collect::<Result<_>>()?;
+            let mut merged: std::collections::BTreeMap<NaiveDate, (bool, ArchivedDay)> =
+                std::collections::BTreeMap::new();
+            for (key, json) in rows {
+                let archive: ArchivedDay = decode(&json)?;
+                let current = key == selected.key;
+                let rank = |current: bool, day: &ArchivedDay| {
+                    (
+                        day.received_at,
+                        day.published_at,
+                        day.day.is_some(),
+                        current,
+                    )
+                };
+                if merged.get(&archive.date).is_none_or(|(old_current, old)| {
+                    rank(current, &archive) > rank(*old_current, old)
+                }) {
+                    merged.insert(archive.date, (current, archive));
+                }
+            }
+            days = merged.into_values().rev().map(|(_, day)| day).collect();
             let chosen = date
                 .and_then(|date| days.iter().find(|day| day.date == date))
                 .or_else(|| days.first());
@@ -202,6 +228,7 @@ impl Store {
                 && let Some(day) = &archive.day
             {
                 let snapshot = ScheduleSnapshot {
+                    plan_suspensions: Vec::new(),
                     forecast_error: None,
                     queue_provenance: None,
                     address_check: None,
@@ -222,10 +249,12 @@ impl Store {
             let rows: Vec<(i64, String, Option<String>, String, String, String)> = self
                 .conn
                 .prepare(
-                    "SELECT id,detected_at,published_at,changes_json,before_json,after_json FROM schedule_changes WHERE address_key=?1 ORDER BY id DESC LIMIT 100",
+                    &format!(
+                        "SELECT id,detected_at,published_at,changes_json,before_json,after_json FROM schedule_changes WHERE address_key IN ({slots}) ORDER BY detected_at DESC,id DESC LIMIT 100"
+                    ),
                 )?
                 .query_map(
-                    [&selected.key],
+                    rusqlite::params_from_iter(&keys),
                     |row| Ok((
                         row.get(0)?,
                         row.get(1)?,

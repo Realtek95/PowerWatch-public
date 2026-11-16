@@ -252,7 +252,8 @@ impl LiveService {
             queue.clone()
         };
         let queue = &effective_queue;
-        let bundle = self.fetch(queue, Utc::now())?;
+        let verify_suspension = previous.is_some_and(|old| !old.plan_suspensions.is_empty());
+        let bundle = self.fetch_with_suspension(queue, Utc::now(), verify_suspension)?;
         Self::assemble(address, queue, direct, bundle, previous, now)
     }
     fn assemble(
@@ -278,12 +279,13 @@ impl LiveService {
             .chain(direct.as_ref().map(|report| report.evidence.checked_at))
             .max()
             .unwrap_or(now);
+        let resolved_at = now.max(received);
         let direct = direct.filter(|report| {
             report
                 .evidence
-                .usable_at(received, chrono::TimeDelta::minutes(45))
+                .usable_at(resolved_at, chrono::TimeDelta::minutes(45))
         });
-        let today = received.with_timezone(&LOCAL_ZONE).date_naive();
+        let today = resolved_at.with_timezone(&LOCAL_ZONE).date_naive();
         let tomorrow = today
             .checked_add_days(chrono::Days::new(1))
             .ok_or(powerwatch_core::CoreError::InvalidTime)?;
@@ -295,28 +297,44 @@ impl LiveService {
         let fresh_count = bundle.candidates.len();
         bundle.candidates.extend(fallback);
         let mut retained = false;
+        let warnings = super::suspension::observations(
+            &bundle.candidates[..fresh_count],
+            previous,
+            address,
+            queue,
+            resolved_at,
+        );
+        let mut effective = bundle.candidates.clone();
+        effective.extend(warnings.iter().map(|notice| SourceSchedule {
+            retained: false,
+            days: Vec::new(),
+            evidence: notice.evidence.clone(),
+            emergency_dates: vec![notice.date],
+        }));
+        let mut plan_suspensions = Vec::new();
+        let plans: Vec<_> = bundle
+            .candidates
+            .iter()
+            .cloned()
+            .map(|mut candidate| {
+                candidate.emergency_dates.clear();
+                candidate
+            })
+            .collect();
         let events: Vec<_> = direct
             .as_ref()
             .and_then(|report| report.event.clone())
             .into_iter()
             .collect();
         for date in [today, tomorrow] {
-            let fresh = resolve_day(
-                queue,
-                None,
-                date,
-                &bundle.candidates[..fresh_count],
-                &[],
-                received,
-            )?;
-            let mut resolved_queue =
-                resolve_day(queue, None, date, &bundle.candidates, &[], received)?;
+            let fresh = resolve_day(queue, None, date, &plans[..fresh_count], &[], resolved_at)?;
+            let mut resolved_queue = resolve_day(queue, None, date, &plans, &[], resolved_at)?;
             retained |= super::retention::display_gaps(
                 &mut resolved_queue,
                 previous,
                 address,
                 queue,
-                received,
+                resolved_at,
             );
             retained |= fresh.day.intervals != resolved_queue.day.intervals;
             queue_days.push(resolved_queue.day);
@@ -328,19 +346,30 @@ impl LiveService {
                     .as_ref()
                     .and_then(|details| details.binding.as_ref())),
                 date,
-                &bundle.candidates,
+                &effective,
                 &events,
-                received,
+                resolved_at,
             )?;
-            retained |=
-                super::retention::display_gaps(&mut resolved, previous, address, queue, received);
+            for notice in warnings.iter().filter(|notice| notice.date == date) {
+                if resolved.provenance.iter().any(|part| {
+                    part.evidence
+                        .iter()
+                        .any(|proof| proof.provider.id == notice.evidence.provider.id)
+                }) {
+                    plan_suspensions.push(notice.clone());
+                }
+            }
+            retained |= super::retention::display_gaps(
+                &mut resolved,
+                previous,
+                address,
+                queue,
+                resolved_at,
+            );
             days.push(resolved.day);
             provenance.extend(resolved.provenance);
         }
-        let emergency = bundle.candidates.iter().any(|candidate| {
-            candidate.emergency_dates.contains(&today)
-                && candidate.evidence.provider.kind == powerwatch_core::grid::ProviderKind::Operator
-        });
+        let emergency = plan_suspensions.iter().any(|notice| notice.date == today);
         let mut observed_address = address.clone();
         if address
             .details
@@ -356,6 +385,7 @@ impl LiveService {
             }
         }
         Ok(ScheduleSnapshot {
+            plan_suspensions,
             forecast_error: (retained || fresh_count == 0).then(|| "source_unavailable".into()),
             queue_provenance: Some(queue_provenance),
             queue_days: Some(queue_days),
@@ -445,6 +475,14 @@ impl LiveService {
     /// Ordered reads; the shared executor decides when another address is due.
     /// No address text is sent for a queue forecast.
     pub fn fetch(&self, queue: &Queue, now: DateTime<Utc>) -> Result<FetchBundle, FetchError> {
+        self.fetch_with_suspension(queue, now, false)
+    }
+    fn fetch_with_suspension(
+        &self,
+        queue: &Queue,
+        now: DateTime<Utc>,
+        verify_suspension: bool,
+    ) -> Result<FetchBundle, FetchError> {
         let diagnostic = {
             let mut checks = self.backup_checks.lock().map_err(|_| FetchError::Network)?;
             let previous = checks.entry(queue.clone()).or_insert(now);
@@ -454,7 +492,7 @@ impl LiveService {
             }
             due
         };
-        self.fetch_ordered(queue, now, diagnostic)
+        self.fetch_ordered(queue, now, diagnostic, verify_suspension)
     }
     /// Explicit diagnostics may inspect all backups. Normal polling only uses
     /// them for missing coverage, or a rare check at most once per six hours.
@@ -463,13 +501,14 @@ impl LiveService {
         queue: &Queue,
         now: DateTime<Utc>,
     ) -> Result<FetchBundle, FetchError> {
-        self.fetch_ordered(queue, now, true)
+        self.fetch_ordered(queue, now, true, false)
     }
     fn fetch_ordered(
         &self,
         queue: &Queue,
         now: DateTime<Utc>,
         diagnostic: bool,
+        verify_suspension: bool,
     ) -> Result<FetchBundle, FetchError> {
         let started = std::time::Instant::now();
         let completed = || now + chrono::TimeDelta::from_std(started.elapsed()).unwrap_or_default();
@@ -538,7 +577,10 @@ impl LiveService {
                 "dtek-dnem",
                 self.direct.forecast(&self.http, queue, completed()),
             )?;
-            if !diagnostic && !needs_backup(&bundle.candidates, queue, completed()) {
+            if !diagnostic
+                && !verify_suspension
+                && !needs_backup(&bundle.candidates, queue, completed())
+            {
                 return Ok(bundle);
             }
         }

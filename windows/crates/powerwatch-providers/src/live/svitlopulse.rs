@@ -74,12 +74,17 @@ pub fn parse(
     for (date, ranges) in [(today, &data.group.today), (tomorrow, &data.group.tomorrow)] {
         let (start, end) = day_bounds(date).map_err(|_| FetchError::InvalidData)?;
         let applied = !emergency && data.group.plan_status == "applies" && !ranges.is_empty();
+        let published = applied
+            || (emergency
+                && ranges
+                    .iter()
+                    .any(|range| matches!(range.kind.as_str(), "off" | "maybe")));
         let mut intervals = Vec::new();
         for range in ranges {
             if range.start < start || range.end > end || range.end <= range.start {
                 return Err(FetchError::InvalidData);
             }
-            let state = if !applied {
+            let state = if !published {
                 ScheduleState::Unknown
             } else {
                 match range.kind.as_str() {

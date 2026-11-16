@@ -52,10 +52,21 @@ pub struct DaySchedule {
     pub date: NaiveDate,
     pub intervals: Vec<ScheduleInterval>,
 }
+/// The source which suspended the applicability of a published queue plan.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanSuspension {
+    pub date: NaiveDate,
+    pub evidence: crate::grid::SourceEvidence,
+}
 /// Receipt and publication times have different meanings and are not conflated.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScheduleSnapshot {
+    /// Published plan remains visible, but these dates are not applicable to
+    /// current-state predictions or reminders during an emergency regime.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plan_suspensions: Vec<PlanSuspension>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub forecast_error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

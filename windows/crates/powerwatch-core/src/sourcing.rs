@@ -109,7 +109,7 @@ pub fn resolve_day(
     let mut intervals = Vec::new();
     let mut provenance = Vec::new();
     for pair in points.windows(2) {
-        let mut choices: Vec<(u8, ScheduleState, &SourceEvidence, bool)> = Vec::new();
+        let mut choices: Vec<(u8, ScheduleState, &SourceEvidence, bool, bool)> = Vec::new();
         for candidate in &forecasts {
             let source_priority = if candidate.emergency_dates.contains(&date)
                 && candidate.evidence.provider.kind == ProviderKind::Operator
@@ -125,6 +125,7 @@ pub fn resolve_day(
                     ScheduleState::Unknown,
                     &candidate.evidence,
                     candidate.retained,
+                    true,
                 ));
             } else if let Some(interval) = candidate
                 .days
@@ -142,6 +143,7 @@ pub fn resolve_day(
                     interval.state,
                     &candidate.evidence,
                     candidate.retained,
+                    false,
                 ));
             }
         }
@@ -166,14 +168,17 @@ pub fn resolve_day(
                 } else {
                     event.state
                 };
-                choices.push((0, state, &event.evidence, false));
+                choices.push((0, state, &event.evidence, false, false));
             }
         }
         let priority = choices.iter().map(|choice| choice.0).min();
-        let selected: Vec<_> = choices
+        let mut selected: Vec<_> = choices
             .into_iter()
             .filter(|choice| Some(choice.0) == priority)
             .collect();
+        if selected.iter().any(|choice| choice.4) {
+            selected.retain(|choice| choice.4);
+        }
         let conflict = selected.windows(2).any(|pair| pair[0].1 != pair[1].1);
         let state = if conflict {
             ScheduleState::Unknown

@@ -142,7 +142,7 @@ pub fn tick_with_source(
             });
         }
         let started = std::time::Instant::now();
-        let previous = store.cached(&key)?;
+        let previous = store.forecast_context(&key, now)?;
         let fetched = if manual.is_some() {
             source.refresh_for(&saved.address, now, previous.as_ref())
         } else {

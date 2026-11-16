@@ -204,6 +204,7 @@ export interface Dashboard {
     staleAfterSeconds: number;
   };
   snapshot: {
+    planSuspensions?: { date: string }[];
     queueDays?: DaySchedule[] | null;
     addressCheck?: {
       catalog: { providerId: string; streetId: string; houseId: string };
