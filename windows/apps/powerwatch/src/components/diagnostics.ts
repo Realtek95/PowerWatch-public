@@ -17,7 +17,7 @@ export function diagnosticsMarkup(state: DiagnosticsState): string {
       ${row(uk.lastAttempt, state.lastAttempt ? formatMoment(state.lastAttempt) : uk.never)}
       ${row(uk.lastSuccess, data ? formatMoment(data.snapshot.receivedAt) : uk.never)}
       ${row(uk.published, data?.snapshot.publishedAt ? formatMoment(data.snapshot.publishedAt) : "—")}
-      ${row(uk.dataAge, data ? formatDuration(data.freshness.ageSeconds) : "—")}
+      ${row(uk.dataAge, data ? `${formatDuration(data.freshness.ageSeconds)} ${uk.ago}` : "—")}
       ${row(uk.staleAfter, data ? formatDuration(data.freshness.staleAfterSeconds) : "—")}
     </dl><button id="diagnostics-refresh" class="primary-button" data-action="refresh" ${loading ? "disabled" : ""}>${uk.refresh}</button>
   </section>`;

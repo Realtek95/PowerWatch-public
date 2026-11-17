@@ -106,7 +106,7 @@ export const uk = {
     },
   ],
   searchingAddresses: "Шукаємо адреси…",
-  checkFailed: "Перевірка неуспішна",
+  checkFailed: "Не вдалося оновити дані",
   monitoringEnabled: "Автоматично перевіряти графіки",
   notificationEnabled: "Увімкнути локальні сповіщення",
   notificationSettings: "Нагадування й дозволи",
@@ -345,7 +345,7 @@ export const uk = {
   beforeOutage: "Відключення через",
   plannedUntil: "За графіком — до",
   endUnknown: "Час завершення невідомий",
-  eventReached: "Час події настав. Оновіть графік.",
+  eventReached: "Плановий час настав",
   noOutages: "Відключень не заплановано",
   uncertainEvent: "Наступну подію ще не визначено",
   forecastNote: "За графіком оператора",
@@ -409,7 +409,7 @@ export const uk = {
     extended: "Відключення подовжено",
     shortened: "Відключення скорочено",
     intervals_revised: "Графік уточнено",
-    data_availability: "Змінилася повнота даних графіка",
+    data_availability: "Дані графіка оновлено",
     source_status: "Повідомлення джерела змінено",
     queue: "Групу змінено",
     expected_restoration: "Очікуване відновлення змінено",
@@ -418,7 +418,7 @@ export const uk = {
   historyEmpty: "Історія ще порожня",
   historyBody:
     "Тут з’являться збережені графіки завершених днів. Відсутні дані не вважаються днями без відключень.",
-  statistics: "Статистика за 7 днів",
+  statistics: "Статистика графіків",
   statisticsEmpty: "Поки недостатньо даних",
   statisticsBody:
     "Підсумки будуть доступні після збереження історії. Вони описуватимуть графік, а не фактичну відсутність електроенергії.",
@@ -426,6 +426,13 @@ export const uk = {
   chart: "Графік",
   historyShort: "Історія",
   statisticsShort: "Статистика",
+  checksSection: "Перевірки",
+  settingsBack: "Усі налаштування",
+  clarifyTerritory: "Уточнити район і громаду",
+  territoryAmbiguous:
+    "Є кілька населених пунктів із такою назвою. Уточніть район або громаду.",
+  ago: "тому",
+  details: "Подробиці",
   settings: "Налаштування",
   appearance: "Оформлення",
   fontSize: "Розмір тексту",
@@ -438,8 +445,8 @@ export const uk = {
   diagnosticsBody: "Локальні дані та стан останніх перевірок джерел.",
   lastAttempt: "Остання спроба перевірки",
   lastSuccess: "Остання успішна перевірка",
-  dataAge: "Вік даних",
-  staleAfter: "Дані застарівають через",
+  dataAge: "Дані отримано",
+  staleAfter: "Термін актуальності",
   never: "Ще не виконувалася",
   refreshQueued: "Оновлення очікує виконання",
   retryPending: "Повторна спроба запланована",
@@ -464,7 +471,7 @@ export const uk = {
   errors: {
     refresh_queued: "Оновлення очікує виконання.",
     source_limited:
-      "Джерело попросило зробити паузу. Спробуйте пізніше або збережіть адресу без групи.",
+      "Джерело тимчасово обмежило перевірки. Спробуйте пізніше або збережіть адресу без групи.",
     unresolved_address:
       "Адреса ще не зіставлена з даними оператора. Графік і група невідомі.",
     request_paused:

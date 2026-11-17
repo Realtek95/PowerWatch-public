@@ -56,6 +56,9 @@ export class AddressWizard {
   private geographicVersion: string | null = null;
   private countryHouses = new Map<string, CountryEntry>();
   private territoryRevision = 0;
+  private readonly territoryDetails = document.createElement("details");
+  private cityChoices: CatalogEntry[] = [];
+  private readonly territoryHint = document.createElement("p");
   private readonly postcode = document.createElement("p");
   private readonly street: Autocomplete;
   private readonly house: Autocomplete;
@@ -101,7 +104,12 @@ export class AddressWizard {
       "address-city",
       uk.city,
       uk.cityPlaceholder,
-      () => {
+      (entry) => {
+        if (entry) {
+          this.territoryHint.hidden = true;
+          if (!this.district.value && !this.community.value)
+            this.territoryDetails.open = false;
+        }
         this.cancelLookup();
         this.street.setOptions([]);
         this.house.setOptions([]);
@@ -124,6 +132,32 @@ export class AddressWizard {
       uk.optionalTerritory,
       () => void this.territoryChanged(false),
     );
+    this.territoryDetails.className = "address-territory";
+    this.territoryDetails.hidden = true;
+    const territorySummary = document.createElement("summary");
+    territorySummary.textContent = uk.clarifyTerritory;
+    this.territoryHint.className = "muted";
+    this.territoryHint.textContent = uk.territoryAmbiguous;
+    this.territoryHint.hidden = true;
+    this.territoryDetails.append(
+      territorySummary,
+      this.territoryHint,
+      this.district.element,
+      this.community.element,
+    );
+    this.postcode.hidden = true;
+    this.city.input.addEventListener("input", () => {
+      const query = this.city.input.value.trim().toLocaleLowerCase("uk-UA");
+      const ambiguous =
+        query.length >= 3 &&
+        this.cityChoices.filter(
+          (item) =>
+            item.name.split(" · ")[0]?.trim().toLocaleLowerCase("uk-UA") ===
+            query,
+        ).length > 1;
+      this.territoryHint.hidden = !ambiguous;
+      if (ambiguous) this.territoryDetails.open = true;
+    });
     this.district.setOptions([], true);
     this.community.setOptions([], true);
     this.street = new Autocomplete(
@@ -228,8 +262,7 @@ export class AddressWizard {
     this.form.append(
       help,
       this.oblast.element,
-      this.district.element,
-      this.community.element,
+      this.territoryDetails,
       this.city.element,
       this.operator.element,
       this.street.element,
@@ -301,10 +334,12 @@ export class AddressWizard {
           if (revision + 1 !== this.revision || this.touched) return;
           if (details.geographic?.version === this.geographicVersion) {
             if (details.geographic.districtId) {
+              this.territoryDetails.open = true;
               this.district.select(details.geographic.districtId);
               await this.territoryChanged(true);
             }
             if (details.geographic.communityId) {
+              this.territoryDetails.open = true;
               this.community.select(details.geographic.communityId);
               await this.territoryChanged(false);
             }
@@ -403,7 +438,9 @@ export class AddressWizard {
       ]);
       if (revision !== this.revision) return;
       const typed = this.city.input.value;
+      this.cityChoices = items;
       this.city.setOptions(items);
+      this.territoryDetails.hidden = !entry;
       this.city.input.value = typed;
       this.district.setOptions(
         districts?.items ?? [],
@@ -452,6 +489,7 @@ export class AddressWizard {
           : Promise.resolve(null),
       ]);
       if (revision !== this.territoryRevision) return;
+      this.cityChoices = cities.items;
       this.city.setOptions(cities.items);
       this.geographicVersion = cities.version;
       if (communities)
@@ -724,6 +762,7 @@ export class AddressWizard {
     );
   }
   private updateSave(): void {
+    this.postcode.hidden = !this.postcode.textContent;
     this.detectGroup.textContent = this.resolvingGroup
       ? uk.groupChecking
       : uk.detectGroup;

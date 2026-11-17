@@ -14,6 +14,134 @@ pub(crate) struct DailyCandidate {
     pub day: DaySchedule,
     pub provenance: Option<Vec<powerwatch_core::sourcing::IntervalEvidence>>,
 }
+/// Archive the published calendar, never the emergency applicability mask.
+pub(crate) fn published_candidate(
+    snapshot: &ScheduleSnapshot,
+    day: &DaySchedule,
+) -> Result<DailyCandidate> {
+    let (start, end) = day_bounds(day.date)?;
+    let proofs = if snapshot.queue_days.is_some() {
+        snapshot.queue_provenance.as_ref()
+    } else {
+        snapshot.provenance.as_ref()
+    };
+    Ok(DailyCandidate {
+        day: day.clone(),
+        provenance: proofs.map(|parts| {
+            parts
+                .iter()
+                .filter(|part| part.start < end && part.end > start)
+                .map(|part| {
+                    let mut value = part.clone();
+                    value.start = value.start.max(start);
+                    value.end = value.end.min(end);
+                    value
+                })
+                .collect()
+        }),
+    })
+}
+/// Repair only an exact old masked observation, using a plan that was already
+/// stored with that same receipt. No newer response can rewrite a frozen day.
+fn recover_emergency_candidate(
+    tx: &rusqlite::Transaction<'_>,
+    key: &str,
+    candidate: &DailyCandidate,
+    received: DateTime<Utc>,
+) -> Result<Option<DailyCandidate>> {
+    let (_, end) = day_bounds(candidate.day.date)?;
+    if received >= end {
+        return Ok(None);
+    }
+    let mut statement = tx
+        .prepare(
+            "SELECT snapshot_json FROM snapshots WHERE address_key=?1 AND received_at=?2 ORDER BY id DESC LIMIT 16",
+        )?;
+    let rows = statement.query_map(params![key, received.to_rfc3339()], |row| {
+        row.get::<_, String>(0)
+    })?;
+    for row in rows {
+        let snapshot: ScheduleSnapshot = decode(&row?)?;
+        if snapshot.received_at != received
+            || !snapshot
+                .plan_suspensions
+                .iter()
+                .any(|notice| notice.date == candidate.day.date)
+            || !snapshot.days.iter().any(|day| {
+                day.date == candidate.day.date && day.intervals == candidate.day.intervals
+            })
+        {
+            continue;
+        }
+        if let Some(day) = snapshot
+            .queue_days
+            .as_ref()
+            .and_then(|days| days.iter().find(|day| day.date == candidate.day.date))
+            && day
+                .intervals
+                .iter()
+                .any(|part| part.state != ScheduleState::Unknown)
+        {
+            return Ok(Some(published_candidate(&snapshot, day)?));
+        }
+    }
+    Ok(None)
+}
+fn freeze_day(
+    date: NaiveDate,
+    candidate: Option<(DateTime<Utc>, Option<DateTime<Utc>>, DailyCandidate)>,
+    frozen_at: DateTime<Utc>,
+) -> Result<ArchivedDay> {
+    let (start, end) = day_bounds(date)?;
+    let mut archive = ArchivedDay {
+        provenance: None,
+        date,
+        quality: ArchiveQuality::Missing,
+        day: None,
+        received_at: None,
+        published_at: None,
+        frozen_at,
+        known_outage_seconds: 0,
+        uncertain_seconds: (end - start).num_seconds(),
+        outage_count: 0,
+        duration_seconds: (end - start).num_seconds(),
+    };
+    if let Some((received, published, candidate)) = candidate {
+        let day = candidate.day;
+        archive.provenance = candidate.provenance;
+        archive.known_outage_seconds = day
+            .intervals
+            .iter()
+            .filter(|part| part.state == ScheduleState::Outage)
+            .map(|part| (part.end - part.start).num_seconds())
+            .sum();
+        archive.uncertain_seconds = day
+            .intervals
+            .iter()
+            .filter(|part| {
+                matches!(
+                    part.state,
+                    ScheduleState::Unknown | ScheduleState::Switching
+                )
+            })
+            .map(|part| (part.end - part.start).num_seconds())
+            .sum();
+        archive.outage_count = day
+            .intervals
+            .iter()
+            .filter(|part| part.state == ScheduleState::Outage)
+            .count();
+        archive.quality = if archive.uncertain_seconds == 0 && received >= start {
+            ArchiveQuality::Complete
+        } else {
+            ArchiveQuality::Partial
+        };
+        archive.day = Some(day);
+        archive.received_at = Some(received);
+        archive.published_at = published;
+    }
+    Ok(archive)
+}
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryAddress {
@@ -61,13 +189,36 @@ impl Store {
                 let date = today
                     .checked_sub_days(Days::new(offset))
                     .ok_or(StorageError::InvalidTime)?;
-                let exists: bool = tx
+                let existing: Option<String> = tx
                     .query_row(
-                        "SELECT EXISTS(SELECT 1 FROM daily_schedule_archive WHERE address_key=?1 AND date=?2)",
+                        "SELECT archive_json FROM daily_schedule_archive WHERE address_key=?1 AND date=?2",
                         params![key, date.to_string()],
                         |row| row.get(0),
-                    )?;
-                if exists {
+                    )
+                    .optional()?;
+                if let Some(json) = existing {
+                    let archive: ArchivedDay = decode(&json)?;
+                    if archive.quality == ArchiveQuality::Partial
+                        && let (Some(day), Some(received)) = (&archive.day, archive.received_at)
+                    {
+                        let candidate = DailyCandidate {
+                            day: day.clone(),
+                            provenance: archive.provenance.clone(),
+                        };
+                        if let Some(recovered) =
+                            recover_emergency_candidate(&tx, &key, &candidate, received)?
+                        {
+                            let repaired = freeze_day(
+                                date,
+                                Some((received, archive.published_at, recovered)),
+                                archive.frozen_at,
+                            )?;
+                            tx.execute(
+                                "UPDATE daily_schedule_archive SET archive_json=?1 WHERE address_key=?2 AND date=?3",
+                                params![encode(& repaired) ?, key, date.to_string()],
+                            )?;
+                        }
+                    }
                     continue;
                 }
                 let candidate: Option<(String, Option<String>, String)> = tx
@@ -77,56 +228,21 @@ impl Store {
                         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
                     )
                     .optional()?;
-                let (start, end) = day_bounds(date)?;
-                let mut archive = ArchivedDay {
-                    provenance: None,
-                    date,
-                    quality: ArchiveQuality::Missing,
-                    day: None,
-                    received_at: None,
-                    published_at: None,
-                    frozen_at: now,
-                    known_outage_seconds: 0,
-                    uncertain_seconds: (end - start).num_seconds(),
-                    outage_count: 0,
-                    duration_seconds: (end - start).num_seconds(),
-                };
-                if let Some((received, published, json)) = candidate {
-                    let candidate: DailyCandidate = decode(&json)?;
-                    let day = candidate.day;
-                    archive.provenance = candidate.provenance;
-                    let received = instant(&received)?;
-                    archive.known_outage_seconds = day
-                        .intervals
-                        .iter()
-                        .filter(|item| item.state == ScheduleState::Outage)
-                        .map(|item| (item.end - item.start).num_seconds())
-                        .sum();
-                    archive.uncertain_seconds = day
-                        .intervals
-                        .iter()
-                        .filter(|item| {
-                            matches!(
-                                item.state,
-                                ScheduleState::Unknown | ScheduleState::Switching
-                            )
-                        })
-                        .map(|item| (item.end - item.start).num_seconds())
-                        .sum();
-                    archive.outage_count = day
-                        .intervals
-                        .iter()
-                        .filter(|item| item.state == ScheduleState::Outage)
-                        .count();
-                    archive.quality = if archive.uncertain_seconds == 0 && received >= start {
-                        ArchiveQuality::Complete
-                    } else {
-                        ArchiveQuality::Partial
-                    };
-                    archive.day = Some(day);
-                    archive.received_at = Some(received);
-                    archive.published_at = published.map(|value| instant(&value)).transpose()?;
-                }
+                let candidate = candidate
+                    .map(|(received, published, json)| -> Result<_> {
+                        let received = instant(&received)?;
+                        let candidate: DailyCandidate = decode(&json)?;
+                        let candidate =
+                            recover_emergency_candidate(&tx, &key, &candidate, received)?
+                                .unwrap_or(candidate);
+                        Ok((
+                            received,
+                            published.map(|value| instant(&value)).transpose()?,
+                            candidate,
+                        ))
+                    })
+                    .transpose()?;
+                let archive = freeze_day(date, candidate, now)?;
                 tx.execute(
                     "INSERT INTO daily_schedule_archive(address_key,date,archive_json) VALUES(?1,?2,?3)",
                     params![key, date.to_string(), encode(& archive) ?],

@@ -64,6 +64,7 @@ import {
   statisticsMarkup,
   changesMarkup,
   changeDetails,
+  changePreview,
 } from "./components/history";
 import type {
   AppInfo,
@@ -198,21 +199,46 @@ function emptyCard(kind: "history" | "statistics", compact = false): string {
         ? `${uk.fullDays}: ${stats.completeDays} · ${uk.partialDays}: ${stats.partialDays} · ${uk.missingDays}: ${stats.missingDays}`
         : `${uk.plannedOutage}: ${formatDuration(stats.knownOutageSeconds)} · ${uk.knownOnly}`
       : uk.loading;
-    return `<section class="card empty-card"><div class="section-heading"><h2>${icon(isHistory ? "history" : "chart")}${isHistory ? uk.history : uk.statistics}</h2><button class="plain-button" data-page="${kind}" aria-label="${isHistory ? uk.history : uk.statistics}">${icon("chevron")}</button></div><p class="section-caption">${html(text)}</p></section>`;
+    const selected = archiveView?.addresses.find(
+      (entry) => entry.key === archiveView?.selectedKey,
+    );
+    const latest =
+      isHistory && selected?.address.id === data?.snapshot.address.id
+        ? archiveView?.changes[0]
+        : undefined;
+    return `<section class="card empty-card"><div class="section-heading"><h2>${icon(isHistory ? "history" : "chart")}${isHistory ? uk.history : uk.statistics}</h2><button class="plain-button" data-page="${kind}" aria-label="${isHistory ? uk.history : uk.statistics}">${icon("chevron")}</button></div><p class="section-caption">${html(text)}</p>${latest ? `<div class="change-preview">${changePreview(latest)}</div><button class="text-button" data-change="${latest.id}">${uk.details}</button>` : ""}</section>`;
   }
   return `<section class="card empty-card"><div class="section-heading"><h2>${icon(isHistory ? "history" : "chart")}${isHistory ? uk.history : uk.statistics}</h2>${compact ? `<button class="plain-button" data-page="${kind}" aria-label="${isHistory ? uk.history : uk.statistics}">${icon("chevron")}</button>` : ""}</div>
     ${isHistory ? `<p class="section-caption">${uk.lastSevenDays}</p>` : ""}
     <div class="empty-content"><span class="empty-icon">${icon(isHistory ? "history" : "chart")}</span><div><h3>${isHistory ? uk.historyEmpty : uk.statisticsEmpty}</h3><p>${isHistory ? uk.historyBody : uk.statisticsBody}</p></div></div></section>`;
 }
 
+type SettingsSection = "checks" | "notifications" | "appearance" | "about";
+let settingsSection: SettingsSection | null = null;
+let savedMonitoring: Element | null = null;
+let savedNotifications: Element | null = null;
+let savedPlatform: Element | null = null;
 function settingsMarkup(): string {
+  const sections: [SettingsSection, IconName, string][] = [
+    ["checks", "refresh", uk.checksSection],
+    ["notifications", "bell", uk.notifications],
+    ["appearance", "moon", uk.appearance],
+    ["about", "info", uk.about],
+  ];
+  if (!settingsSection)
+    return `<section class="card settings-card"><h2>${icon("settings")}${uk.settings}</h2><div class="settings-sections">${sections.map(([id, symbol, label]) => `<button class="settings-link" data-settings-section="${id}">${icon(symbol)}<span>${label}</span>${icon("chevron")}</button>`).join("")}</div><button class="settings-link" data-page="addresses">${icon("pin")}${uk.addresses}${icon("chevron")}</button></section>`;
+  const title = sections.find(([id]) => id === settingsSection)![2];
   const theme = localStorage.getItem("theme") ?? "system";
   const large = localStorage.getItem("font-size") === "large";
-  return `<section class="card settings-card"><h2>${icon("settings")}${uk.settings}</h2><button class="settings-link" data-page="addresses">${icon("pin")}${uk.addresses}${icon("chevron")}</button><h3>${uk.appearance}</h3><div class="theme-buttons">${(["system", "light", "dark"] as const).map((key) => `<button data-theme="${key}" aria-pressed="${theme === key}">${uk[key]}</button>`).join("")}</div>
-    <h3>${uk.fontSize}</h3><div class="theme-buttons"><button data-font="normal" aria-pressed="${!large}">${uk.normalText}</button><button data-font="large" aria-pressed="${large}">${uk.largeText}</button></div><p class="muted settings-inline-note">${uk.appearanceSaved}</p><div id="monitoring-preferences"></div><div id="background-preferences"></div>
-    <button class="settings-link" data-action="notifications">${icon("bell")}${uk.notificationJournal}${icon("chevron")}</button><button class="settings-link" data-page="changes">${icon("history")}${uk.changesTitle}${icon("chevron")}</button><button class="settings-link" data-page="diagnostics">${icon("info")}${uk.diagnosticsTitle}${icon("chevron")}</button>
-    ${aboutMarkup(appInfo, aboutError)}
-  </section>`;
+  const content =
+    settingsSection === "checks"
+      ? `<div id="monitoring-preferences"></div><div id="platform-preferences"></div><button class="settings-link" data-page="diagnostics">${icon("info")}${uk.diagnosticsTitle}${icon("chevron")}</button><button class="settings-link" data-page="changes">${icon("history")}${uk.changesTitle}${icon("chevron")}</button>`
+      : settingsSection === "notifications"
+        ? `<div id="background-preferences"></div><button class="settings-link" data-action="notifications">${icon("bell")}${uk.notificationJournal}${icon("chevron")}</button>`
+        : settingsSection === "appearance"
+          ? `<h3>${uk.appearance}</h3><div class="theme-buttons">${(["system", "light", "dark"] as const).map((key) => `<button data-theme="${key}" aria-pressed="${theme === key}">${uk[key]}</button>`).join("")}</div><h3>${uk.fontSize}</h3><div class="theme-buttons"><button data-font="normal" aria-pressed="${!large}">${uk.normalText}</button><button data-font="large" aria-pressed="${large}">${uk.largeText}</button></div><p class="muted settings-inline-note">${uk.appearanceSaved}</p>`
+          : aboutMarkup(appInfo, aboutError);
+  return `<section class="card settings-card"><div class="section-heading"><h2>${title}</h2><button class="text-button" data-settings-section="all">${uk.settingsBack}</button></div>${content}</section>`;
 }
 
 function onboardingMarkup(): string {
@@ -304,14 +330,19 @@ function render(): void {
   const archiveScroll =
     shell.querySelector<HTMLElement>(".archive-dates")?.scrollLeft;
   const restoreFocus = retainFocus(shell);
-  const backgroundPreferences =
-    page === "settings" ? shell.querySelector("#background-settings") : null;
-  const preferences =
-    page === "settings" ? shell.querySelector("#monitoring-settings") : null;
+  savedPlatform = shell.querySelector("#platform-settings") ?? savedPlatform;
+  savedNotifications =
+    shell.querySelector("#background-settings") ?? savedNotifications;
+  savedMonitoring =
+    shell.querySelector("#monitoring-settings") ?? savedMonitoring;
+  const backgroundPreferences = savedNotifications;
+  const preferences = savedMonitoring;
   const nextScreen =
     session && !session.onboardingComplete
       ? `onboarding:${session.addresses.length ? "preferences" : "welcome"}`
-      : page;
+      : page === "settings"
+        ? `settings:${settingsSection ?? "all"}`
+        : page;
   if (screenKey && nextScreen !== screenKey)
     pageTransitionAt = performance.now();
   screenKey = nextScreen;
@@ -367,7 +398,7 @@ function render(): void {
         page === "home"
           ? `${statusMarkup(value, degraded, currentNow())}${!emergencyNow(value, currentNow()) || value.snapshot.addressCheck?.event ? sourceReportMarkup(value) : ""}
       <section class="card next-event"><div class="event-icon">${icon("calendar")}</div><div class="event-content"><p>${uk.nextEvent}</p><h2 data-event-title>${html(event?.title ?? "")}</h2><span data-event-detail>${icon("clock")}${html(event?.detail ?? "")}</span></div><div class="countdown" data-countdown ${event?.countdown ? "" : "hidden"}>${event?.countdown ?? ""}</div></section>
-      <div class="freshness"><span title="${html(formatMoment(value.snapshot.receivedAt))}">${icon("refresh")}${uk.updated}: <b>${formatTime(value.snapshot.receivedAt)}</b></span><span class="freshness-badge ${degraded || incomplete || !!errorCode ? "failed" : ""}">${icon(degraded || incomplete || !!errorCode ? "info" : "check")}${refreshQueued ? uk.refreshQueued : errorCode ? (value.retryPending ? uk.retryPending : uk.checkFailed) : value.freshness.status === "clock_mismatch" ? uk.clockMismatch : degraded ? uk.staleData : incomplete ? uk.partial : uk.currentData}</span></div><p class="freshness-detail">${uk.dataAge}: <span data-age>${formatDuration(value.freshness.ageSeconds)}</span>${value.snapshot.publishedAt ? ` · ${uk.published}: ${html(formatMoment(value.snapshot.publishedAt))}` : ""}</p>`
+      <div class="freshness"><span title="${html(formatMoment(value.snapshot.receivedAt))}">${icon("refresh")}${uk.updated}: <b>${formatTime(value.snapshot.receivedAt)}</b></span><span class="freshness-badge ${degraded || incomplete || !!errorCode ? "failed" : ""}">${icon(degraded || incomplete || !!errorCode ? "info" : "check")}${refreshQueued ? uk.refreshQueued : errorCode ? (value.retryPending ? uk.retryPending : uk.checkFailed) : value.freshness.status === "clock_mismatch" ? uk.clockMismatch : degraded ? uk.staleData : incomplete ? uk.partial : uk.currentData}</span></div><p class="freshness-detail">${uk.dataAge}: <span data-age>${formatDuration(value.freshness.ageSeconds)} ${uk.ago}</span>${value.snapshot.publishedAt ? ` · ${uk.published}: ${html(formatMoment(value.snapshot.publishedAt))}` : ""}</p>`
           : ""
       }
       ${scheduleMarkup(value)}${page === "home" ? evidenceMarkup(value) + emptyCard("history", true) + emptyCard("statistics", true) : ""}`
@@ -422,7 +453,14 @@ function render(): void {
   if (backgroundContainer) {
     if (backgroundPreferences)
       backgroundContainer.replaceChildren(backgroundPreferences);
-    else new NotificationSettingsForm(backgroundContainer);
+    else new NotificationSettingsForm(backgroundContainer, "notifications");
+    const platformContainer = shell.querySelector<HTMLElement>(
+      "#platform-preferences",
+    );
+    if (platformContainer) {
+      if (savedPlatform) platformContainer.replaceChildren(savedPlatform);
+      else new NotificationSettingsForm(platformContainer, "background");
+    }
   }
   restoreFocus();
   refreshCarousels(shell, archiveScroll);
@@ -572,6 +610,11 @@ window.addEventListener("powerwatch-back", (event) => {
   } else if (detailsDialog.open) {
     event.preventDefault();
     dialogDismissal.requestClose();
+  } else if (page === "settings" && settingsSection) {
+    event.preventDefault();
+    settingsSection = null;
+    render();
+    window.scrollTo({ top: 0 });
   } else if (page === "help") {
     event.preventDefault();
     closeHelp();
@@ -646,9 +689,10 @@ function tick(): void {
   }
   const age = document.querySelector("[data-age]");
   if (age)
-    age.textContent = formatDuration(
-      data.freshness.ageSeconds + (now - Date.parse(data.now)) / 1000,
-    );
+    age.textContent =
+      formatDuration(
+        data.freshness.ageSeconds + (now - Date.parse(data.now)) / 1000,
+      ) + ` ${uk.ago}`;
   const clock = document.querySelector("[data-clock]");
   if (clock) clock.textContent = formatTime(now);
   document.querySelectorAll<HTMLElement>(".now-marker").forEach((marker) => {
@@ -708,7 +752,22 @@ app.addEventListener("click", (event) => {
     "button",
   );
   if (!button) return;
+  if (button.dataset.settingsSection) {
+    const section = button.dataset.settingsSection;
+    if (
+      section === "all" ||
+      ["checks", "notifications", "appearance", "about"].includes(section)
+    ) {
+      settingsSection = section === "all" ? null : (section as SettingsSection);
+      render();
+      window.scrollTo({ top: 0 });
+      if (settingsSection === "about") void loadAbout();
+      if (settingsSection === "notifications")
+        void refreshNotificationPermission();
+    }
+  }
   if (button.dataset.page) {
+    if (button.dataset.page === "settings") settingsSection = null;
     page = button.dataset.page as Page;
     render();
     if (page === "settings") void loadAbout();
@@ -1013,6 +1072,7 @@ if (isTauri()) {
   });
   void listen("open-settings", () => {
     page = "settings";
+    settingsSection = null;
     render();
     void loadAbout();
   });

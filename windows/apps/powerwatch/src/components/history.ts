@@ -5,6 +5,7 @@ import {
   formatMoment,
   formatDuration,
   formatRange,
+  formatTime,
 } from "../format";
 import type { ArchiveView, ChangeRecord } from "../types";
 import { selectControl, dateControl } from "./controls";
@@ -38,6 +39,52 @@ export function statisticsMarkup(view: ArchiveView | null): string {
   const totals = view.statistics;
   return `<section class="card statistics-card"><h2>${uk.statistics}</h2><p class="muted">${uk.archiveNotice}</p>${archiveSelector(view)}<dl class="diagnostic-facts"><div><dt>${uk.plannedOutage}</dt><dd>${formatDuration(totals.knownOutageSeconds)} · ${uk.knownOnly}</dd></div><div><dt>${uk.uncertainTime}</dt><dd>${formatDuration(totals.uncertainSeconds)}</dd></div><div><dt>${uk.completeAverage}</dt><dd>${totals.averageCompleteDaySeconds === null ? "—" : formatDuration(totals.averageCompleteDaySeconds)}</dd></div><div><dt>${uk.fullDays} / ${uk.partialDays} / ${uk.missingDays}</dt><dd>${totals.completeDays} / ${totals.partialDays} / ${totals.missingDays}</dd></div><div><dt>${uk.outagePeriods}</dt><dd>${totals.outageCount}</dd></div></dl><div class="week-chart">${view.days.map((day) => `<div><span>${formatDate(day.date)}</span><div class="week-bar"><i style="width:${Math.min(100, (day.knownOutageSeconds / day.durationSeconds) * 100)}%"></i></div><strong>${day.quality === "missing" ? "—" : formatDuration(day.knownOutageSeconds)}</strong><small>${uk[day.quality]}</small></div>`).join("")}</div></section>`;
 }
+/** Show the changed boundary immediately; snapshots remain available below. */
+export function changePreview(record: ChangeRecord): string {
+  const pair = (before: string, after: string) =>
+    `${uk.before} ${before} → ${uk.after.toLocaleLowerCase("uk-UA")} ${after}`;
+  const at = (value: string, other: string) =>
+    formatMoment(value).slice(0, 10) === formatMoment(other).slice(0, 10)
+      ? formatTime(value)
+      : formatMoment(value);
+  const lines = record.changes.map((change) => {
+    if (change.before && change.after) {
+      const before = change.before,
+        after = change.after;
+      if (before.end === after.end)
+        return pair(
+          at(before.start, after.start),
+          at(after.start, before.start),
+        );
+      if (before.start === after.start)
+        return pair(at(before.end, after.end), at(after.end, before.end));
+      const differentDate =
+        formatMoment(before.start).slice(0, 10) !==
+        formatMoment(after.start).slice(0, 10);
+      return pair(
+        `${differentDate ? formatMoment(before.start).slice(0, 10) + ", " : ""}${formatRange(before)}`,
+        `${differentDate ? formatMoment(after.start).slice(0, 10) + ", " : ""}${formatRange(after)}`,
+      );
+    }
+    if (
+      change.kind === "expected_restoration" &&
+      record.before.expectedRestoration &&
+      record.after.expectedRestoration
+    )
+      return pair(
+        at(record.before.expectedRestoration, record.after.expectedRestoration),
+        at(record.after.expectedRestoration, record.before.expectedRestoration),
+      );
+    if (change.kind === "queue")
+      return pair(
+        record.before.address.queue ?? "—",
+        record.after.address.queue ?? "—",
+      );
+    return `${uk.changeKinds[change.kind]}${change.before ? ` · ${formatRange(change.before)}` : ""}${change.after ? ` · ${formatRange(change.after)}` : ""}`;
+  });
+  return [...new Set(lines)].map((line) => `<p>${html(line)}</p>`).join("");
+}
+
 export function changesMarkup(
   view: ArchiveView | null,
   filterDate = "",
@@ -47,10 +94,14 @@ export function changesMarkup(
   const records = view.changes.filter(
     (record) => !filterDate || record.detectedDate === filterDate,
   );
-  return `<section class="card"><h2>${uk.changesTitle}</h2>${archiveSelector(view)}<div class="filter-field"><label class="field-label" for="change-date">${uk.filterDate}</label>${dateControl(filterDate, view.changes[0]?.detectedDate ?? view.days[0]?.date ?? new Date().toISOString().slice(0, 10))}</div>${records.length ? records.map((record) => `<article class="change-row"><p>${uk.detectedAt}: ${formatMoment(record.detectedAt)}${record.publishedAt ? ` · ${uk.published}: ${formatMoment(record.publishedAt)}` : ""}</p><ul>${record.changes.map((change) => `<li>${uk.changeKinds[change.kind]}${change.before ? ` · ${formatRange(change.before)}` : ""}${change.after ? ` → ${formatRange(change.after)}` : ""}</li>`).join("")}</ul><button class="text-button" data-change="${record.id}">${uk.before} → ${uk.after}</button></article>`).join("") : `<p class="empty-content">${uk.changesEmpty}</p>`}</section>`;
+  return `<section class="card"><h2>${uk.changesTitle}</h2>${archiveSelector(view)}<div class="filter-field"><label class="field-label" for="change-date">${uk.filterDate}</label>${dateControl(filterDate, view.changes[0]?.detectedDate ?? view.days[0]?.date ?? new Date().toISOString().slice(0, 10))}</div>${records.length ? records.map((record) => `<article class="change-row"><p>${uk.detectedAt}: ${formatMoment(record.detectedAt)}${record.publishedAt ? ` · ${uk.published}: ${formatMoment(record.publishedAt)}` : ""}</p><div class="change-preview">${changePreview(record)}</div><button class="text-button" data-change="${record.id}">${uk.details}</button></article>`).join("") : `<p class="empty-content">${uk.changesEmpty}</p>`}</section>`;
 }
 export function changeDetails(record: ChangeRecord): string {
   const snapshot = (label: string, value: ChangeRecord["before"]) =>
     `<h3>${label}</h3><p>${html(value.address.queue ?? uk.queueUnknown)} · ${html(value.sourceStatus === "reported_available" ? uk.sourceReportedRestored : value.sourceStatus === "reported_unavailable" ? uk.sourceReportedOutage : uk.sourceUnknown)}</p>${(value.queueDays ?? value.days).map((day) => `<h4>${formatDate(day.date)}</h4><ul>${day.intervals.map((item) => `<li>${formatRange(item)} · ${uk.states[item.state]}</li>`).join("")}</ul>`).join("")}`;
-  return snapshot(uk.before, record.before) + snapshot(uk.after, record.after);
+  return (
+    `<div class="change-preview">${changePreview(record)}</div>` +
+    snapshot(uk.before, record.before) +
+    snapshot(uk.after, record.after)
+  );
 }

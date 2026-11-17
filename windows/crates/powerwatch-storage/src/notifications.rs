@@ -239,8 +239,15 @@ impl Store {
             });
             if !prefs.allows_plan(&record.plan) || address.is_none() {
                 self.set_notification_state(&record.plan.key, "cancelled", now)?;
-            } else if record.plan.expires_at < now {
-                self.set_notification_state(&record.plan.key, "expired", now)?;
+            } else {
+                let snapshot = if record.plan.kind == NotificationKind::Warning {
+                    self.cached(&record.plan.address_key)?
+                } else {
+                    None
+                };
+                if record.plan.effective_expiry(snapshot.as_ref()) < now {
+                    self.set_notification_state(&record.plan.key, "expired", now)?;
+                }
             }
         }
         Ok(())
@@ -251,7 +258,7 @@ impl Store {
         now: DateTime<Utc>,
         permission: bool,
     ) -> Result<Option<NotificationRecord>> {
-        let Some(record) = self
+        let Some(mut record) = self
             .pending_notifications()?
             .into_iter()
             .find(|record| record.plan.key == key)
@@ -263,6 +270,12 @@ impl Store {
         }
         let prefs = self.notification_preferences()?;
         let book = self.load_book()?.state();
+        let snapshot = if record.plan.kind == NotificationKind::Test {
+            None
+        } else {
+            self.cached(&record.plan.address_key)?
+        };
+        record.plan.expires_at = record.plan.effective_expiry(snapshot.as_ref());
         let mut rejection = if record.plan.expires_at < now {
             Some("expired")
         } else if !permission {
@@ -278,7 +291,7 @@ impl Store {
                 rejection = Some("cancelled");
             } else if prefs.is_quiet(now) {
                 rejection = Some("quiet");
-            } else if let Some(snapshot) = self.cached(&record.plan.address_key)? {
+            } else if let Some(snapshot) = snapshot.as_ref() {
                 use powerwatch_core::model::SourceStatus;
                 if (record.plan.kind == NotificationKind::SourceOutage
                     && snapshot.source_status != SourceStatus::ReportedUnavailable)
@@ -309,11 +322,11 @@ impl Store {
                 }
                 if !record
                     .plan
-                    .fresh_for(&snapshot, now, book.check_interval_minutes)
+                    .fresh_for(snapshot, now, book.check_interval_minutes)
                 {
                     rejection = Some("stale");
                 }
-                if !record.plan.matches_snapshot(&snapshot, now) {
+                if !record.plan.matches_snapshot(snapshot, now) {
                     rejection = Some("cancelled");
                 }
             } else {
@@ -350,11 +363,17 @@ impl Store {
             self.set_notification_state(key, reason, now)?;
             return Ok(None);
         }
+        let label = book
+            .addresses
+            .iter()
+            .find(|saved| address_key(saved) == record.plan.address_key)
+            .map_or("", |saved| saved.address.label.as_str());
+        record.plan.prepare_for_delivery(label, now);
         let changed = self
             .conn
             .execute(
-                "UPDATE notifications SET state='submitted_unknown',updated_at=?1 WHERE key=?2 AND state='planned'",
-                params![now.to_rfc3339(), key],
+                "UPDATE notifications SET state='submitted_unknown',updated_at=?1,payload_json=?2 WHERE key=?3 AND state='planned'",
+                params![now.to_rfc3339(), encode(& record.plan) ?, key],
             )?;
         if changed == 0 {
             return Ok(None);
@@ -481,7 +500,7 @@ pub(crate) fn replace_in_transaction(
                 .iter()
                 .any(|plan| plan.kind == old.kind && plan.key != old.key);
         let due_valid = old.at <= now
-            && now <= old.expires_at
+            && now <= old.effective_expiry(snapshot.as_ref())
             && prefs.allows_plan(&old)
             && snapshot
                 .as_ref()

@@ -152,6 +152,42 @@ fn forecast_usable(snapshot: &ScheduleSnapshot, now: DateTime<Utc>, interval: u1
         })
 }
 impl PlannedNotification {
+    /// A delayed warning stays relevant while its unchanged outage is ongoing.
+    /// Derive this from the latest plan, including already queued reminders.
+    pub fn effective_expiry(&self, snapshot: Option<&ScheduleSnapshot>) -> DateTime<Utc> {
+        if self.kind == NotificationKind::Warning
+            && let (Some(snapshot), Some(boundary)) = (snapshot, self.boundary)
+        {
+            let days: Vec<_> = snapshot.planned_days().cloned().collect();
+            if let Some(period) = outage_periods(&days)
+                .into_iter()
+                .find(|period| period.start == boundary)
+            {
+                return period.end;
+            }
+        }
+        self.expires_at
+    }
+    /// Refresh the visible countdown only when submitting to the OS. Stable
+    /// scheduling keys and the originally selected lead time are not changed.
+    pub fn prepare_for_delivery(&mut self, label: &str, now: DateTime<Utc>) {
+        if self.kind == NotificationKind::Test {
+            self.title = text::TEST_TITLE.into();
+            self.body = text::TEST.into();
+            return;
+        }
+        let Some(boundary) = self.boundary else {
+            return;
+        };
+        let message = match self.kind {
+            NotificationKind::Warning => text::warning(boundary, now),
+            NotificationKind::ForecastStart => text::forecast_start(boundary),
+            NotificationKind::ForecastEnd => text::forecast_end(boundary),
+            _ => return,
+        };
+        self.title = text::title(label, &message.event);
+        self.body = message.body;
+    }
     pub fn fresh_for(
         &self,
         snapshot: &ScheduleSnapshot,
@@ -215,8 +251,9 @@ impl PlannedNotification {
                     })
             }
             NotificationKind::Warning => {
-                boundary > now
-                    && periods.iter().any(|period| period.start == boundary)
+                periods
+                    .iter()
+                    .any(|period| period.start == boundary && period.end > now)
                     && !intervals.iter().any(|part| {
                         part.start < boundary
                             && part.end > now
@@ -238,7 +275,7 @@ fn plan(
     kind: NotificationKind,
     at: DateTime<Utc>,
     suffix: &str,
-    body: String,
+    message: text::NotificationText,
     prefs: &NotificationPreferences,
 ) -> PlannedNotification {
     let (key, local_id) = identity;
@@ -256,8 +293,8 @@ fn plan(
                 | NotificationKind::SourceCleared => TimeDelta::minutes(45),
                 _ => TimeDelta::hours(1),
             },
-        title: text::title(&snapshot.address.label),
-        body,
+        title: text::title(&snapshot.address.label, &message.event),
+        body: message.body,
         sound: prefs.sound,
         vibration: prefs.vibration,
         boundary: None,
@@ -337,11 +374,11 @@ pub fn plan_with_reference(
                         NotificationKind::Warning,
                         at,
                         &format!("{suffix}:{lead}"),
-                        text::warning(outage.start),
+                        text::warning(outage.start, at),
                         prefs,
                     );
                     item.boundary = Some(outage.start);
-                    item.expires_at = outage.start;
+                    item.expires_at = outage.end;
                     plans.push(item);
                 }
             }
@@ -398,10 +435,9 @@ pub fn plan_with_reference(
         && !changed
         && old.source_status == SourceStatus::ReportedUnavailable
         && snapshot.source_status == SourceStatus::ReportedUnavailable
-        && matches!(
-            (old.expected_restoration, snapshot.expected_restoration), (Some(before),
-            Some(after)) if before != after
-        )
+        && let (Some(before), Some(after)) =
+            (old.expected_restoration, snapshot.expected_restoration)
+        && before != after
     {
         plans.push(plan(
             (key, local_id),
@@ -413,7 +449,7 @@ pub fn plan_with_reference(
                 snapshot.expected_restoration,
                 old.received_at.timestamp_millis()
             ),
-            text::RESTORATION_CHANGED.into(),
+            text::restoration_changed(before, after),
             prefs,
         ));
     }

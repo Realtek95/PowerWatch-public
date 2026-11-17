@@ -173,7 +173,7 @@ pub fn test_notification(
             kind: NotificationKind::Test,
             at: now,
             expires_at: now + TimeDelta::minutes(2),
-            title: "PowerWatch".into(),
+            title: powerwatch_notifications::text::TEST_TITLE.into(),
             body: powerwatch_notifications::text::TEST.into(),
             sound: prefs.sound,
             vibration: prefs.vibration,

@@ -42,8 +42,12 @@ export function updateReminderStatus(
 /** Retained DOM keeps unfinished edits intact while the clock projects the UI. */
 export class NotificationSettingsForm {
   readonly element = document.createElement("section");
-  constructor(container: HTMLElement) {
-    this.element.id = "background-settings";
+  constructor(
+    container: HTMLElement,
+    private readonly mode: "all" | "notifications" | "background" = "all",
+  ) {
+    this.element.id =
+      mode === "background" ? "platform-settings" : "background-settings";
     container.replaceChildren(this.element);
     void this.load();
   }
@@ -78,6 +82,21 @@ export class NotificationSettingsForm {
     ${value.platform === "windows" ? `<form class="platform-form settings-section"><h3>${uk.windowsSettings}</h3><div class="switch-group">${check("tray", uk.tray, value.platformSettings.tray)}${check("autostart", uk.autostart, value.platformSettings.autostart)}</div><div class="save-footer"><button class="primary-button" type="submit">${uk.savePlatform}</button><p class="result" role="status" hidden></p></div></form>` : ""}
     ${value.platform === "android" ? `<section class="settings-section android-background"><h3>${uk.androidBackgroundSettings}</h3><div data-reminder-status></div><p class="muted">${uk.androidBackgroundHelp}</p><button class="secondary-button" data-local="background-settings">${uk.androidBackgroundSettings}</button><p class="result" role="status" hidden></p></section>` : ""}
     <section class="settings-section notification-test"><h3>${uk.testSection}</h3><p class="muted">${uk.notificationLimits[value.platform]}</p><div class="button-row"><button class="secondary-button" data-local="test">${uk.testNotification}</button></div><p class="result" role="status" hidden></p></section>`;
+    if (this.mode === "background") {
+      this.element.querySelector(".monitoring-form")?.remove();
+      this.element.querySelector(".notification-test")?.remove();
+      this.element.querySelector("[data-reminder-status]")?.remove();
+    } else if (this.mode === "notifications") {
+      this.element.querySelector(".platform-form")?.remove();
+      const background = this.element.querySelector(".android-background");
+      if (background) {
+        background.querySelector("h3")?.remove();
+        background
+          .querySelector('button[data-local="background-settings"]')
+          ?.remove();
+        background.querySelector("p.muted")?.remove();
+      }
+    }
     updateReminderStatus(this.element, value.reminderStatus);
     const perform = async (
       section: HTMLElement,
@@ -105,47 +124,49 @@ export class NotificationSettingsForm {
         result.hidden = !result.textContent;
       }
     };
-    this.element.querySelector("form")!.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const form = event.target as HTMLFormElement;
-      form.querySelector<HTMLFieldSetElement>(".quiet-window")!.disabled =
-        !form.querySelector<HTMLInputElement>('[name="quiet"]')!.checked;
-      if (!form.reportValidity()) return;
-      const fields = new FormData(form);
-      const preferences: NotificationPreferences = {
-        ...prefs,
-        enabled: value.platform === "android" ? true : fields.has("enabled"),
-        leadMinutes: [60, 30, 15, 10, 5].filter((lead) =>
-          fields.has(`lead-${lead}`),
-        ),
-        quietHours: fields.has("quiet")
-          ? {
-              startMinute: minute(fields.get("quiet-from")),
-              endMinute: minute(fields.get("quiet-until")),
-            }
-          : null,
-        sound: fields.has("sound"),
-        vibration:
-          value.platform === "android"
-            ? fields.has("vibration")
-            : prefs.vibration,
-      };
-      for (const key of Object.keys(
-        uk.notificationKinds,
-      ) as (keyof typeof uk.notificationKinds)[])
-        preferences[key] = fields.has(key);
-      void perform(
-        form,
-        async () => {
-          await setNotificationPreferences(preferences);
-          prefs = preferences;
-        },
-        uk.notificationsSaved,
-      );
-    });
     this.element
-      .querySelector('[name="quiet"]')!
-      .addEventListener("change", () => {
+      .querySelector(".monitoring-form")
+      ?.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const form = event.target as HTMLFormElement;
+        form.querySelector<HTMLFieldSetElement>(".quiet-window")!.disabled =
+          !form.querySelector<HTMLInputElement>('[name="quiet"]')!.checked;
+        if (!form.reportValidity()) return;
+        const fields = new FormData(form);
+        const preferences: NotificationPreferences = {
+          ...prefs,
+          enabled: value.platform === "android" ? true : fields.has("enabled"),
+          leadMinutes: [60, 30, 15, 10, 5].filter((lead) =>
+            fields.has(`lead-${lead}`),
+          ),
+          quietHours: fields.has("quiet")
+            ? {
+                startMinute: minute(fields.get("quiet-from")),
+                endMinute: minute(fields.get("quiet-until")),
+              }
+            : null,
+          sound: fields.has("sound"),
+          vibration:
+            value.platform === "android"
+              ? fields.has("vibration")
+              : prefs.vibration,
+        };
+        for (const key of Object.keys(
+          uk.notificationKinds,
+        ) as (keyof typeof uk.notificationKinds)[])
+          preferences[key] = fields.has(key);
+        void perform(
+          form,
+          async () => {
+            await setNotificationPreferences(preferences);
+            prefs = preferences;
+          },
+          uk.notificationsSaved,
+        );
+      });
+    this.element
+      .querySelector('[name="quiet"]')
+      ?.addEventListener("change", () => {
         this.element.querySelector<HTMLFieldSetElement>(
           ".quiet-window",
         )!.disabled =

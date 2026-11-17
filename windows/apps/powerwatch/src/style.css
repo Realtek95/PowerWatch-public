@@ -2399,3 +2399,39 @@ dialog::backdrop {
   background: #b78625;
   color: #fff;
 }
+
+.settings-sections {
+  display: grid;
+  gap: 0.6rem;
+  margin: 1rem 0;
+}
+.settings-sections .settings-link {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem;
+}
+.settings-sections .settings-link span {
+  flex: 1;
+  text-align: left;
+}
+.address-territory {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.75rem;
+}
+.address-territory summary {
+  color: var(--green);
+  cursor: pointer;
+  font-weight: 600;
+}
+.address-territory[open] summary {
+  margin-bottom: 1rem;
+}
+.address-territory .autocomplete-field + .autocomplete-field {
+  margin-top: 1rem;
+}
+.change-preview {
+  background: var(--subtle);
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+}

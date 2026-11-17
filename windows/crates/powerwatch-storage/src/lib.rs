@@ -433,26 +433,11 @@ impl Store {
             "INSERT INTO latest_snapshots(address_key,snapshot_json) VALUES(?1,?2) ON CONFLICT(address_key) DO UPDATE SET snapshot_json=excluded.snapshot_json",
             params![key, json],
         )?;
-        for day in &snapshot.days {
+        for day in snapshot.queue_days.as_ref().unwrap_or(&snapshot.days) {
             if day.date < today {
                 continue;
             }
-            let (start, end) = powerwatch_core::time::day_bounds(day.date)?;
-            let candidate = archive::DailyCandidate {
-                day: day.clone(),
-                provenance: snapshot.provenance.as_ref().map(|parts| {
-                    parts
-                        .iter()
-                        .filter(|part| part.start < end && part.end > start)
-                        .map(|part| {
-                            let mut value = part.clone();
-                            value.start = value.start.max(start);
-                            value.end = value.end.min(end);
-                            value
-                        })
-                        .collect()
-                }),
-            };
+            let candidate = archive::published_candidate(&snapshot, day)?;
             tx.execute(
                 "INSERT INTO daily_candidates(address_key,date,received_at,published_at,day_json) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(address_key,date) DO UPDATE SET received_at=excluded.received_at,published_at=excluded.published_at,day_json=excluded.day_json",
                 params![
