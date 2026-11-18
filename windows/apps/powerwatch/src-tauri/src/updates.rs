@@ -2,6 +2,7 @@
 //! retained in Rust may be installed; the frontend never supplies a URL/path.
 use crate::{AppState, CommandError};
 use chrono::{DateTime, TimeDelta, Utc};
+use powerwatch_updates::cache::SavedManifest;
 use powerwatch_updates::{ReleaseClient, ReleaseManifest, UpdateConfig, UpdateError};
 use serde::Serialize;
 use std::sync::Mutex;
@@ -27,7 +28,7 @@ pub fn maintain_cache(app: &tauri::AppHandle) {
             .0
             .lock()
             .ok()
-            .and_then(|inner| inner.downloaded.clone());
+            .and_then(|inner| inner.busy.then(|| inner.downloaded.clone()).flatten());
         let _ = powerwatch_updates::cache::prune_installers(
             &directory.join("updates"),
             env!("CARGO_PKG_VERSION"),
@@ -36,12 +37,33 @@ pub fn maintain_cache(app: &tauri::AppHandle) {
         );
     }
 }
-#[derive(Default)]
 struct Inner {
+    restored: bool,
+    status: &'static str,
+    phase: &'static str,
+    percent: u64,
+    error: Option<&'static str>,
+    package_state: &'static str,
     busy: bool,
     failed_download: bool,
     pending: Option<Pending>,
     downloaded: Option<std::path::PathBuf>,
+}
+impl Default for Inner {
+    fn default() -> Self {
+        Self {
+            restored: false,
+            status: "skipped",
+            phase: "idle",
+            percent: 0,
+            error: None,
+            package_state: "missing",
+            busy: false,
+            failed_download: false,
+            pending: None,
+            downloaded: None,
+        }
+    }
 }
 #[derive(Clone)]
 struct Pending {
@@ -49,13 +71,18 @@ struct Pending {
     platform: String,
     checked_at: DateTime<Utc>,
 }
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateResult {
     status: &'static str,
     version: Option<String>,
     notes: Option<String>,
     size: Option<u64>,
+    phase: &'static str,
+    progress: u64,
+    package_state: &'static str,
+    error_code: Option<&'static str>,
+    checked_at: Option<DateTime<Utc>>,
 }
 impl UpdateResult {
     fn empty(status: &'static str) -> Self {
@@ -64,10 +91,44 @@ impl UpdateResult {
             version: None,
             notes: None,
             size: None,
+            phase: "idle",
+            progress: 0,
+            package_state: "missing",
+            error_code: None,
+            checked_at: None,
         }
     }
 }
-fn begin(app: &tauri::AppHandle) -> Result<(), CommandError> {
+fn snapshot(inner: &Inner) -> UpdateResult {
+    let mut value = UpdateResult::empty(inner.status);
+    if let Some(pending) = &inner.pending {
+        value.checked_at = Some(pending.checked_at);
+        value.version = Some(pending.manifest.version.clone());
+        value.notes = Some(pending.manifest.notes.clone());
+        value.size = Some(pending.manifest.platforms[&pending.platform].size);
+    }
+    value.phase = inner.phase;
+    value.progress = inner.percent;
+    value.package_state = inner.package_state;
+    value.error_code = inner.error;
+    value
+}
+fn state_result(app: &tauri::AppHandle) -> Result<UpdateResult, CommandError> {
+    let state = app.state::<UpdateState>();
+    let inner = state.0.lock().map_err(|_| CommandError {
+        code: "internal_error",
+    })?;
+    Ok(snapshot(&inner))
+}
+fn report(app: &tauri::AppHandle, phase: &'static str, percent: u64) {
+    if let Ok(mut inner) = app.state::<UpdateState>().0.lock() {
+        inner.phase = phase;
+        inner.percent = percent;
+    }
+    let _ = app.emit("update-phase", phase);
+    let _ = app.emit("update-progress", percent);
+}
+fn begin(app: &tauri::AppHandle, phase: &'static str) -> Result<(), CommandError> {
     let state = app.state::<UpdateState>();
     let mut inner = state.0.lock().map_err(|_| CommandError {
         code: "internal_error",
@@ -78,12 +139,190 @@ fn begin(app: &tauri::AppHandle) -> Result<(), CommandError> {
         });
     }
     inner.busy = true;
+    inner.phase = phase;
+    inner.error = None;
     Ok(())
 }
-fn finish(app: &tauri::AppHandle) {
+fn finish(app: &tauri::AppHandle, error: Option<&'static str>) {
     if let Ok(mut inner) = app.state::<UpdateState>().0.lock() {
         inner.busy = false;
+        inner.error = error;
+        if error.is_some() {
+            inner.phase = "error";
+        }
     }
+    if let Ok(value) = state_result(app) {
+        let _ = app.emit("update-state", value);
+    }
+}
+fn platform(app: &tauri::AppHandle, manifest: &ReleaseManifest) -> Result<String, CommandError> {
+    let value = "windows-x86_64";
+    let asset = manifest.platforms.get(value).ok_or(CommandError {
+        code: "update_unavailable",
+    })?;
+    let _ = (app, asset);
+    Ok(value.into())
+}
+fn attach(app: &tauri::AppHandle, pending: Pending) -> Result<UpdateResult, CommandError> {
+    let directory = app
+        .path()
+        .app_cache_dir()
+        .map_err(|_| CommandError {
+            code: "storage_error",
+        })?
+        .join("updates");
+    let asset = &pending.manifest.platforms[&pending.platform];
+    let downloaded =
+        powerwatch_updates::cache::cached_installer(&directory, &pending.manifest.version, asset)
+            .map_err(|_| CommandError {
+            code: "storage_error",
+        })?;
+    let extension = if pending.platform.starts_with("android") {
+        "apk"
+    } else {
+        "exe"
+    };
+    let partial = directory.join(format!(
+        "{}-{}.{}.part",
+        pending.manifest.version,
+        asset.sha256.to_ascii_lowercase(),
+        extension
+    ));
+    let partial_size = partial
+        .metadata()
+        .ok()
+        .filter(|m| m.is_file())
+        .map(|m| m.len())
+        .unwrap_or(0);
+    let package_state = if downloaded.is_some() {
+        "ready"
+    } else if partial_size > 0 && partial_size <= asset.size {
+        "partial"
+    } else {
+        "missing"
+    };
+    let state = app.state::<UpdateState>();
+    let mut inner = state.0.lock().map_err(|_| CommandError {
+        code: "internal_error",
+    })?;
+    inner.percent = if package_state == "ready" {
+        100
+    } else {
+        (partial_size.saturating_mul(100) / asset.size).min(99)
+    };
+    inner.status = "available";
+    inner.phase = if package_state == "ready" {
+        "ready"
+    } else {
+        "available"
+    };
+    inner.package_state = package_state;
+    inner.downloaded = downloaded;
+    inner.pending = Some(pending);
+    inner.failed_download = package_state == "partial";
+    Ok(snapshot(&inner))
+}
+fn restore(app: &tauri::AppHandle) -> Result<(), CommandError> {
+    let configuration = config()?;
+    if !configuration.configured() {
+        return Ok(());
+    }
+    let saved = app
+        .state::<AppState>()
+        .repo()?
+        .store
+        .setting::<SavedManifest>("update_signed_manifest")?;
+    let Some(saved) = saved else {
+        return Ok(());
+    };
+    let now = Utc::now();
+    let highest = app
+        .state::<AppState>()
+        .repo()?
+        .store
+        .setting::<String>("highest_update_version")?;
+    let Some(manifest) = saved
+        .verify(
+            &configuration,
+            env!("CARGO_PKG_VERSION"),
+            highest.as_deref(),
+            now,
+        )
+        .ok()
+        .flatten()
+    else {
+        return Ok(());
+    };
+    let platform = platform(app, &manifest)?;
+    attach(
+        app,
+        Pending {
+            manifest,
+            platform,
+            checked_at: saved.checked_at,
+        },
+    )?;
+    Ok(())
+}
+#[tauri::command]
+pub async fn get_update_status(app: tauri::AppHandle) -> Result<UpdateResult, CommandError> {
+    let needs_restore = {
+        let state = app.state::<UpdateState>();
+        let inner = state.0.lock().map_err(|_| CommandError {
+            code: "internal_error",
+        })?;
+        !inner.busy && !inner.restored
+    };
+    if needs_restore {
+        begin(&app, "verifying")?;
+        app.state::<UpdateState>()
+            .0
+            .lock()
+            .map_err(|_| CommandError {
+                code: "internal_error",
+            })?
+            .restored = true;
+        let worker = app.clone();
+        let result = tauri::async_runtime::spawn_blocking(move || restore(&worker)).await;
+        let result = result
+            .map_err(|_| CommandError {
+                code: "internal_error",
+            })
+            .and_then(|r| r);
+        if result.is_ok()
+            && app
+                .state::<UpdateState>()
+                .0
+                .lock()
+                .map_err(|_| CommandError {
+                    code: "internal_error",
+                })?
+                .pending
+                .is_none()
+        {
+            report(&app, "idle", 0);
+        }
+        finish(&app, result.as_ref().err().map(|e| e.code));
+        result?;
+    }
+    {
+        let state = app.state::<UpdateState>();
+        let mut inner = state.0.lock().map_err(|_| CommandError {
+            code: "internal_error",
+        })?;
+        if !inner.busy
+            && inner
+                .downloaded
+                .as_ref()
+                .is_some_and(|path| !path.is_file())
+        {
+            inner.downloaded = None;
+            inner.package_state = "missing";
+            inner.percent = 0;
+            inner.phase = "available";
+        }
+    }
+    state_result(&app)
 }
 #[tauri::command]
 pub async fn check_updates(
@@ -94,15 +333,62 @@ pub async fn check_updates(
     if !configuration.configured() {
         return Ok(UpdateResult::empty("disabled"));
     }
-    begin(&app)?;
+    begin(&app, "checking")?;
     let worker = app.clone();
     let result =
         tauri::async_runtime::spawn_blocking(move || check(&worker, configuration, automatic))
             .await;
-    finish(&app);
-    result.map_err(|_| CommandError {
-        code: "internal_error",
-    })?
+    let result = result
+        .map_err(|_| CommandError {
+            code: "internal_error",
+        })
+        .and_then(|value| value);
+    let result = if automatic
+        && result.is_err()
+        && app
+            .state::<UpdateState>()
+            .0
+            .lock()
+            .map_err(|_| CommandError {
+                code: "internal_error",
+            })?
+            .package_state
+            == "ready"
+    {
+        report(&app, "ready", 100);
+        state_result(&app)
+    } else {
+        result
+    };
+    let result = if result.as_ref().is_ok_and(|value| value.status == "skipped") {
+        let mut value = state_result(&app)?;
+        if value.status == "available" {
+            value.phase = if value.package_state == "ready" {
+                "ready"
+            } else {
+                "available"
+            };
+            Ok(value)
+        } else {
+            result
+        }
+    } else {
+        result
+    };
+    if let Ok(value) = &result
+        && let Ok(mut inner) = app.state::<UpdateState>().0.lock()
+    {
+        inner.status = value.status;
+        inner.phase = value.phase;
+        if value.status == "current" {
+            inner.pending = None;
+            inner.downloaded = None;
+            inner.package_state = "missing";
+            inner.percent = 0;
+        }
+    }
+    finish(&app, result.as_ref().err().map(|e| e.code));
+    result
 }
 fn check(
     app: &tauri::AppHandle,
@@ -119,13 +405,9 @@ fn check(
         if let Some(pending) = &inner.pending
             && now - pending.checked_at < TimeDelta::minutes(30)
         {
-            let asset = &pending.manifest.platforms[&pending.platform];
-            return Ok(UpdateResult {
-                status: "available",
-                version: Some(pending.manifest.version.clone()),
-                notes: Some(pending.manifest.notes.clone()),
-                size: Some(asset.size),
-            });
+            let pending = pending.clone();
+            drop(inner);
+            return attach(app, pending);
         }
     }
     {
@@ -160,7 +442,8 @@ fn check(
         }
         repo.store.set_setting("last_update_check", &now)?;
     }
-    let manifest = match ReleaseClient::new()?.check(&configuration, now) {
+    let (manifest, envelope) = match ReleaseClient::new()?.check_with_envelope(&configuration, now)
+    {
         Err(UpdateError::RateLimited(until)) => {
             app.state::<AppState>()
                 .repo()?
@@ -184,34 +467,29 @@ fn check(
     if !powerwatch_updates::newer_version(&manifest.version, env!("CARGO_PKG_VERSION"))? {
         return Ok(UpdateResult::empty("current"));
     }
-    let platform = "windows-x86_64".to_string();
-    let asset = manifest.platforms.get(&platform).ok_or(CommandError {
-        code: "update_unavailable",
+    let platform = platform(app, &manifest)?;
+    let envelope = String::from_utf8(envelope).map_err(|_| CommandError {
+        code: "update_invalid",
     })?;
-    let result = UpdateResult {
-        status: "available",
-        version: Some(manifest.version.clone()),
-        notes: Some(manifest.notes.clone()),
-        size: Some(asset.size),
-    };
-    {
-        let state = app.state::<UpdateState>();
-        let mut inner = state.0.lock().map_err(|_| CommandError {
-            code: "internal_error",
-        })?;
-        inner.failed_download = false;
-        inner.pending = Some(Pending {
+    app.state::<AppState>().repo()?.store.set_setting(
+        "update_signed_manifest",
+        &SavedManifest {
+            envelope,
+            checked_at: now,
+        },
+    )?;
+    attach(
+        app,
+        Pending {
             manifest,
             platform,
             checked_at: now,
-        });
-        inner.downloaded = None;
-    }
-    Ok(result)
+        },
+    )
 }
 #[tauri::command]
-pub async fn install_update(app: tauri::AppHandle) -> Result<&'static str, CommandError> {
-    begin(&app)?;
+pub async fn download_update(app: tauri::AppHandle) -> Result<UpdateResult, CommandError> {
+    begin(&app, "downloading")?;
     let pending = app
         .state::<UpdateState>()
         .0
@@ -223,28 +501,92 @@ pub async fn install_update(app: tauri::AppHandle) -> Result<&'static str, Comma
         .clone();
     let Some(pending) = pending.filter(|p| Utc::now() - p.checked_at < TimeDelta::minutes(30))
     else {
-        finish(&app);
+        finish(&app, Some("update_expired"));
         return Err(CommandError {
             code: "update_expired",
         });
     };
     let worker = app.clone();
-    let result = tauri::async_runtime::spawn_blocking(move || download(&worker, &pending)).await;
-    let result = match result {
-        Ok(result) => result,
-        Err(_) => Err(CommandError {
+    let result = tauri::async_runtime::spawn_blocking(move || download(&worker, &pending))
+        .await
+        .map_err(|_| CommandError {
             code: "internal_error",
-        }),
-    };
+        })
+        .and_then(|r| r);
     if result.is_ok() {
-        let _ = app.emit("update-progress", 100_u64);
-        let _ = app.emit("update-phase", "installing");
+        if let Ok(mut inner) = app.state::<UpdateState>().0.lock() {
+            inner.package_state = "ready";
+        }
+        report(&app, "ready", 100);
     }
+    if result.is_err() {
+        let pending = app
+            .state::<UpdateState>()
+            .0
+            .lock()
+            .ok()
+            .and_then(|inner| inner.pending.clone());
+        if let Some(pending) = pending {
+            let _ = attach(&app, pending);
+        }
+    }
+    finish(&app, result.as_ref().err().map(|e| e.code));
+    result?;
+    state_result(&app)
+}
+#[tauri::command]
+pub async fn install_update(app: tauri::AppHandle) -> Result<&'static str, CommandError> {
+    begin(&app, "installing")?;
+    let pending = app
+        .state::<UpdateState>()
+        .0
+        .lock()
+        .map_err(|_| CommandError {
+            code: "internal_error",
+        })?
+        .pending
+        .clone();
+    let Some(pending) = pending.filter(|p| Utc::now() - p.checked_at < TimeDelta::days(7)) else {
+        finish(&app, Some("update_expired"));
+        return Err(CommandError {
+            code: "update_expired",
+        });
+    };
+    let worker = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let directory = worker
+            .path()
+            .app_cache_dir()
+            .map_err(|_| CommandError {
+                code: "storage_error",
+            })?
+            .join("updates");
+        let path = powerwatch_updates::cache::cached_installer(
+            &directory,
+            &pending.manifest.version,
+            &pending.manifest.platforms[&pending.platform],
+        )
+        .map_err(|_| CommandError {
+            code: "storage_error",
+        })?
+        .ok_or(CommandError {
+            code: "update_not_downloaded",
+        })?;
+        Ok((pending, path))
+    })
+    .await
+    .map_err(|_| CommandError {
+        code: "internal_error",
+    })
+    .and_then(|r: Result<_, CommandError>| r);
     let result = match result {
         Ok((pending, path)) => install_windows(&app, pending, path).await,
         Err(error) => Err(error),
     };
-    finish(&app);
+    if let Ok(status) = &result {
+        report(&app, status, 100);
+    }
+    finish(&app, result.as_ref().err().map(|e| e.code));
     result
 }
 /// Cached installers remain usable offline; each new download attempt is gated.
@@ -322,6 +664,16 @@ fn download(
         asset.sha256.to_ascii_lowercase(),
         extension
     ));
+    if let Ok(metadata) = std::fs::symlink_metadata(&path) {
+        if !metadata.file_type().is_file() {
+            return Err(CommandError {
+                code: "storage_error",
+            });
+        }
+        std::fs::remove_file(&path).map_err(|_| CommandError {
+            code: "storage_error",
+        })?;
+    }
     let partial = path.with_extension(format!("{extension}.part"));
     reserve_download(
         &app.state::<AppState>().repo()?.store,
@@ -356,7 +708,13 @@ fn download(
             let current = (received * 100 / total).min(99);
             if current != percent {
                 percent = current;
-                let _ = app.emit("update-progress", current);
+                let phase = app
+                    .state::<UpdateState>()
+                    .0
+                    .lock()
+                    .map(|inner| inner.phase)
+                    .unwrap_or("downloading");
+                report(app, phase, current);
             }
         },
         |stage| {
@@ -365,7 +723,13 @@ fn download(
                 powerwatch_updates::TransferStage::Waiting => "waiting",
                 powerwatch_updates::TransferStage::Verifying => "verifying",
             };
-            let _ = app.emit("update-phase", phase);
+            let percent = app
+                .state::<UpdateState>()
+                .0
+                .lock()
+                .map(|inner| inner.percent)
+                .unwrap_or(0);
+            report(app, phase, percent);
         },
     );
     if let Err(UpdateError::RateLimited(until)) = &downloaded {
@@ -429,6 +793,5 @@ async fn install_windows(
     let result = update.install(bytes).map_err(|_| CommandError {
         code: "update_signature",
     });
-    let _ = std::fs::remove_file(path);
     result.map(|()| "installer_opened")
 }

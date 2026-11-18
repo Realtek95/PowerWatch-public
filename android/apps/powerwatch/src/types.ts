@@ -22,6 +22,22 @@ export interface UpdateResult {
   version: string | null;
   notes: string | null;
   size: number | null;
+  phase?:
+    | "idle"
+    | "available"
+    | "checking"
+    | "downloading"
+    | "waiting"
+    | "verifying"
+    | "ready"
+    | "installing"
+    | "permission_required"
+    | "installer_opened"
+    | "error";
+  progress?: number;
+  packageState?: "missing" | "partial" | "ready";
+  errorCode?: string | null;
+  checkedAt?: string | null;
 }
 
 export interface AppInfo {

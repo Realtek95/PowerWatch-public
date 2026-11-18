@@ -22,8 +22,6 @@ import {
   getAppInfo,
   setAutomaticUpdates,
   openAppLink,
-  checkUpdates,
-  installUpdate,
   projectDashboard,
   getArchive,
   getViewPreferences,
@@ -46,7 +44,8 @@ import { createHelpPage } from "./components/help";
 import { aboutMarkup, sourcesMarkup, privacyMarkup } from "./components/about";
 import { evidenceMarkup } from "./components/evidence";
 import { emergencyNow, statusMarkup } from "./components/status";
-import { updateMarkup } from "./components/updates";
+import { updateMarkup, updateAction, updateBanner } from "./components/updates";
+import { UpdateFlow, type UpdateOpenReason } from "./components/update-flow";
 import {
   diagnosticsMarkup,
   sourceReportMarkup,
@@ -64,7 +63,7 @@ import {
   statisticsMarkup,
   changesMarkup,
   changeDetails,
-  changePreview,
+  currentChangesMarkup,
 } from "./components/history";
 import type {
   AppInfo,
@@ -72,6 +71,7 @@ import type {
   RuntimeInfo,
   SessionState,
   ArchiveView,
+  UpdateResult,
 } from "./types";
 
 type Page =
@@ -190,6 +190,16 @@ function scheduleMarkup(value: Dashboard, archiveMode = false): string {
   </section>`;
 }
 
+function refreshCurrentChanges(next: Dashboard): void {
+  if (
+    data &&
+    ["home", "chart"].includes(page) &&
+    (data.snapshot.receivedAt !== next.snapshot.receivedAt ||
+      data.snapshot.address.id !== next.snapshot.address.id)
+  )
+    void loadArchive(null, archiveDate, true);
+}
+
 function emptyCard(kind: "history" | "statistics", compact = false): string {
   const isHistory = kind === "history";
   if (compact) {
@@ -199,14 +209,7 @@ function emptyCard(kind: "history" | "statistics", compact = false): string {
         ? `${uk.fullDays}: ${stats.completeDays} · ${uk.partialDays}: ${stats.partialDays} · ${uk.missingDays}: ${stats.missingDays}`
         : `${uk.plannedOutage}: ${formatDuration(stats.knownOutageSeconds)} · ${uk.knownOnly}`
       : uk.loading;
-    const selected = archiveView?.addresses.find(
-      (entry) => entry.key === archiveView?.selectedKey,
-    );
-    const latest =
-      isHistory && selected?.address.id === data?.snapshot.address.id
-        ? archiveView?.changes[0]
-        : undefined;
-    return `<section class="card empty-card"><div class="section-heading"><h2>${icon(isHistory ? "history" : "chart")}${isHistory ? uk.history : uk.statistics}</h2><button class="plain-button" data-page="${kind}" aria-label="${isHistory ? uk.history : uk.statistics}">${icon("chevron")}</button></div><p class="section-caption">${html(text)}</p>${latest ? `<div class="change-preview">${changePreview(latest)}</div><button class="text-button" data-change="${latest.id}">${uk.details}</button>` : ""}</section>`;
+    return `<section class="card empty-card"><div class="section-heading"><h2>${icon(isHistory ? "history" : "chart")}${isHistory ? uk.history : uk.statistics}</h2><button class="plain-button" data-page="${kind}" aria-label="${isHistory ? uk.history : uk.statistics}">${icon("chevron")}</button></div><p class="section-caption">${html(text)}</p></section>`;
   }
   return `<section class="card empty-card"><div class="section-heading"><h2>${icon(isHistory ? "history" : "chart")}${isHistory ? uk.history : uk.statistics}</h2>${compact ? `<button class="plain-button" data-page="${kind}" aria-label="${isHistory ? uk.history : uk.statistics}">${icon("chevron")}</button>` : ""}</div>
     ${isHistory ? `<p class="section-caption">${uk.lastSevenDays}</p>` : ""}
@@ -226,7 +229,7 @@ function settingsMarkup(): string {
     ["about", "info", uk.about],
   ];
   if (!settingsSection)
-    return `<section class="card settings-card"><h2>${icon("settings")}${uk.settings}</h2><div class="settings-sections">${sections.map(([id, symbol, label]) => `<button class="settings-link" data-settings-section="${id}">${icon(symbol)}<span>${label}</span>${icon("chevron")}</button>`).join("")}</div><button class="settings-link" data-page="addresses">${icon("pin")}${uk.addresses}${icon("chevron")}</button></section>`;
+    return `<section class="card settings-card"><h2>${icon("settings")}${uk.settings}</h2><div class="settings-sections">${sections.map(([id, symbol, label]) => `<button class="settings-link" data-settings-section="${id}">${icon(symbol)}<span>${label}</span>${icon("chevron")}</button>`).join("")}<button class="settings-link" data-page="addresses">${icon("pin")}<span>${uk.addresses}</span>${icon("chevron")}</button></div></section>`;
   const title = sections.find(([id]) => id === settingsSection)![2];
   const theme = localStorage.getItem("theme") ?? "system";
   const large = localStorage.getItem("font-size") === "large";
@@ -237,7 +240,7 @@ function settingsMarkup(): string {
         ? `<div id="background-preferences"></div><button class="settings-link" data-action="notifications">${icon("bell")}${uk.notificationJournal}${icon("chevron")}</button>`
         : settingsSection === "appearance"
           ? `<h3>${uk.appearance}</h3><div class="theme-buttons">${(["system", "light", "dark"] as const).map((key) => `<button data-theme="${key}" aria-pressed="${theme === key}">${uk[key]}</button>`).join("")}</div><h3>${uk.fontSize}</h3><div class="theme-buttons"><button data-font="normal" aria-pressed="${!large}">${uk.normalText}</button><button data-font="large" aria-pressed="${large}">${uk.largeText}</button></div><p class="muted settings-inline-note">${uk.appearanceSaved}</p>`
-          : aboutMarkup(appInfo, aboutError);
+          : aboutMarkup(appInfo, aboutError, updateFlow.state);
   return `<section class="card settings-card"><div class="section-heading"><h2>${title}</h2><button class="text-button" data-settings-section="all">${uk.settingsBack}</button></div>${content}</section>`;
 }
 
@@ -283,6 +286,7 @@ function applySession(value: SessionState): void {
       void projectDashboard(addressId, dayOffset)
         .then((result) => {
           if (version !== requestVersion) return;
+          refreshCurrentChanges(result);
           data = result;
           refreshQueued = !!result.refreshPending;
           errorCode = (result.lastCheckError as keyof typeof uk.errors) ?? null;
@@ -325,6 +329,7 @@ async function mutateSession(
 }
 
 function render(): void {
+  const scrollTop = window.scrollY;
   const savedHelp =
     page === "help" ? shell.querySelector<HTMLElement>("#help-page") : null;
   const archiveScroll =
@@ -343,6 +348,7 @@ function render(): void {
       : page === "settings"
         ? `settings:${settingsSection ?? "all"}`
         : page;
+  const changingScreen = nextScreen !== screenKey;
   if (screenKey && nextScreen !== screenKey)
     pageTransitionAt = performance.now();
   screenKey = nextScreen;
@@ -362,7 +368,7 @@ function render(): void {
     false;
   const event = value ? eventCopy(value, currentNow(), degraded) : null;
   shell.innerHTML = `<header class="app-header"><div class="brand"><div class="brand-icon">${icon("zap")}</div><div><h1>PowerWatch</h1><p>${uk.tagline}</p></div></div><div class="header-actions"><button class="icon-button" data-action="help" aria-label="${uk.helpTitle}" title="${uk.helpTitle}">${icon("help")}</button><button class="icon-button" data-action="notifications" aria-label="${uk.notifications}">${icon("bell")}</button><button class="icon-button ${refreshBusy ? "is-loading" : ""}" data-action="refresh" aria-label="${uk.refresh}" ${refreshBusy || !session?.onboardingComplete ? "disabled" : ""}>${icon("refresh")}</button></div></header>
-    <main${motion}><div ${page === "help" ? "hidden" : ""}><div id="notification-permission-notice">${permissionMarkup()}</div><div class="context-strip">${icon("info")}<span>${uk.liveHint}</span><span class="current-time"><b data-clock>${value ? formatTime(currentNow()) : "—"}</b></span></div>
+    <main${motion}><div id="update-status-surface">${updateBanner(updateFlow.state, runtime.platform)}</div><div ${page === "help" ? "hidden" : ""}><div id="notification-permission-notice">${permissionMarkup()}</div><div class="context-strip">${icon("info")}<span>${uk.liveHint}</span><span class="current-time"><b data-clock>${value ? formatTime(currentNow()) : "—"}</b></span></div>
     ${projectionExpired ? `<p class="notice" role="status">${uk.projectionExpired}</p>` : ""}
     ${value && value.freshness.status !== "current" ? `<p class="notice" role="status"><strong>${value.freshness.status === "clock_mismatch" ? uk.clockMismatch : uk.staleData}.</strong> ${uk.staleHint}</p>` : ""}
     ${address && session?.onboardingComplete ? `<button class="address-card" data-page="addresses" aria-label="${uk.chooseAddress}">${icon("pin", "address-pin")}<span class="address-text"><small>${html(address.label)}</small><strong>${html(address.settlement)}</strong><span>${html(address.street)}, ${html(address.house)}</span></span><span class="queue-block">${icon("layers")}<span><small>${uk.queue}</small><b>${html(address.queue ?? "—")}</b></span></span>${icon("chevron", "address-chevron")}</button>` : ""}
@@ -401,7 +407,7 @@ function render(): void {
       <div class="freshness"><span title="${html(formatMoment(value.snapshot.receivedAt))}">${icon("refresh")}${uk.updated}: <b>${formatTime(value.snapshot.receivedAt)}</b></span><span class="freshness-badge ${degraded || incomplete || !!errorCode ? "failed" : ""}">${icon(degraded || incomplete || !!errorCode ? "info" : "check")}${refreshQueued ? uk.refreshQueued : errorCode ? (value.retryPending ? uk.retryPending : uk.checkFailed) : value.freshness.status === "clock_mismatch" ? uk.clockMismatch : degraded ? uk.staleData : incomplete ? uk.partial : uk.currentData}</span></div><p class="freshness-detail">${uk.dataAge}: <span data-age>${formatDuration(value.freshness.ageSeconds)} ${uk.ago}</span>${value.snapshot.publishedAt ? ` · ${uk.published}: ${html(formatMoment(value.snapshot.publishedAt))}` : ""}</p>`
           : ""
       }
-      ${scheduleMarkup(value)}${page === "home" ? evidenceMarkup(value) + emptyCard("history", true) + emptyCard("statistics", true) : ""}`
+      ${scheduleMarkup(value)}${currentChangesMarkup(archiveView, value)}${page === "home" ? evidenceMarkup(value) + emptyCard("history", true) + emptyCard("statistics", true) : ""}`
     }
     ${page === "help" ? "" : `<p class="footer-note">${uk.actualPowerNote}</p>`}</main>
     ${
@@ -464,6 +470,7 @@ function render(): void {
   }
   restoreFocus();
   refreshCarousels(shell, archiveScroll);
+  window.scrollTo({ top: changingScreen ? 0 : scrollTop });
   tick();
 }
 
@@ -480,61 +487,68 @@ async function loadAbout(): Promise<void> {
     if (page === "settings") render();
   }
 }
-let checkingUpdates = false;
-let installingUpdate = false;
-async function checkForUpdates(automatic: boolean): Promise<void> {
-  if (checkingUpdates || installingUpdate) return;
-  checkingUpdates = true;
-  if (!automatic) showDialog(uk.updateTitle, `<p>${uk.updateChecking}</p>`);
-  const version = dialogVersion;
-  try {
-    const result = await checkUpdates(automatic);
-    if (!automatic && version === dialogVersion)
-      document.querySelector("#dialog-content")!.innerHTML = updateMarkup(
-        result,
-        runtime?.platform,
-      );
-    else if (
-      automatic &&
-      result.status === "available" &&
-      !document.querySelector("#details[open]")
-    )
-      showDialog(uk.updateTitle, updateMarkup(result, runtime?.platform));
-  } catch (error) {
-    if (!automatic && version === dialogVersion) {
-      const code = commandErrorCode(error) as keyof typeof uk.errors;
-      document.querySelector("#dialog-content")!.innerHTML =
-        `<p>${uk.errors[code] ?? uk.errors.internal_error}</p>`;
-    }
-  } finally {
-    checkingUpdates = false;
-    if (!automatic) void loadAbout();
-  }
-}
-async function runUpdateInstallation(): Promise<void> {
-  if (installingUpdate) return;
-  installingUpdate = true;
+const updateFlow = new UpdateFlow(
+  syncUpdateSurface,
+  openUpdateDialog,
+  undefined,
+  () =>
+    document.visibilityState !== "hidden" &&
+    detailsDialog.open &&
+    !!detailsDialog.querySelector("[data-update-dialog]"),
+);
+function openUpdateDialog(reason: UpdateOpenReason): void {
+  if (
+    reason !== "user" &&
+    (detailsDialog.open ||
+      document.visibilityState === "hidden" ||
+      !session?.onboardingComplete)
+  )
+    return;
   showDialog(
     uk.updateTitle,
-    `<p id="update-phase">${uk.updateDownload}</p><progress id="update-progress" max="100" value="0" aria-label="${uk.updateDownload}"></progress>`,
+    `<div data-update-dialog>${updateMarkup(updateFlow.state, runtime.platform)}</div>`,
   );
-  const version = dialogVersion;
-  try {
-    const status = await installUpdate();
-    if (version === dialogVersion)
-      document.querySelector("#dialog-content")!.innerHTML =
-        status === "permission_required"
-          ? `<p>${uk.updatePermission}</p><div class="form-actions"><button class="primary-button" data-action="install-update">${uk.updateContinue}</button></div>`
-          : `<p>${uk.updateInstallerOpened}</p>`;
-  } catch (error) {
-    if (version === dialogVersion) {
-      const code = commandErrorCode(error) as keyof typeof uk.errors;
-      document.querySelector("#dialog-content")!.innerHTML =
-        `<p>${uk.errors[code] ?? uk.errors.internal_error}</p><div class="form-actions"><button class="primary-button" data-action="${code === "update_expired" ? "check-updates" : "install-update"}">${code === "update_expired" ? uk.updateTitle : uk.updateRetry}</button></div>`;
+}
+function syncUpdateSurface(): void {
+  const state = updateFlow.state;
+  const key = JSON.stringify([
+    state.phase,
+    state.version,
+    state.packageState,
+    state.errorCode,
+  ]);
+  const surface = shell.querySelector<HTMLElement>("#update-status-surface");
+  const content = detailsDialog.querySelector<HTMLElement>(
+    "[data-update-dialog]",
+  );
+  for (const [element, markup] of [
+    [surface, () => updateBanner(state, runtime.platform)],
+    [content, () => updateMarkup(state, runtime.platform)],
+  ] as const) {
+    if (!element) continue;
+    if (element.dataset.updateKey !== key) {
+      element.innerHTML = markup();
+      element.dataset.updateKey = key;
+    } else {
+      const progress =
+        element.querySelector<HTMLProgressElement>("#update-progress");
+      if (progress && state.phase !== "checking")
+        progress.value = state.progress ?? 0;
+      for (const label of element.querySelectorAll("[data-update-percent]"))
+        label.textContent = `${state.progress ?? 0}%`;
     }
-  } finally {
-    installingUpdate = false;
   }
+  const action = updateAction(state);
+  for (const button of shell.querySelectorAll<HTMLButtonElement>(
+    "[data-update-action]",
+  )) {
+    button.dataset.action = action.action;
+    button.textContent = action.label;
+  }
+}
+async function checkForUpdates(automatic: boolean): Promise<void> {
+  await updateFlow.check(automatic);
+  if (!automatic) void loadAbout();
 }
 async function load(): Promise<void> {
   if (!addressId || !session?.onboardingComplete || loading || refreshQueued)
@@ -548,6 +562,7 @@ async function load(): Promise<void> {
   try {
     const result = await getDashboard(addressId, dayOffset);
     if (version !== requestVersion) return;
+    refreshCurrentChanges(result);
     data = result;
     refreshQueued = !!result.refreshPending;
     receivedAt = performance.now();
@@ -657,6 +672,7 @@ async function loadJournal(version: number): Promise<void> {
 async function loadArchive(
   key: string | null = null,
   date: string | null = archiveDate,
+  quiet = false,
 ): Promise<void> {
   const version = ++historyVersion;
   try {
@@ -666,7 +682,7 @@ async function loadArchive(
     archiveDate = date ?? view.days[0]?.date ?? null;
     render();
   } catch (error) {
-    if (version === historyVersion)
+    if (version === historyVersion && !quiet)
       showDialog(
         uk.history,
         `<p role="alert">${html(uk.errors[commandErrorCode(error) as keyof typeof uk.errors] ?? uk.errors.internal_error)}</p>`,
@@ -725,6 +741,7 @@ async function updateProjection(): Promise<void> {
   try {
     const result = await projectDashboard(addressId, dayOffset);
     if (version !== requestVersion) return;
+    refreshCurrentChanges(result);
     data = result;
     refreshQueued = !!result.refreshPending;
     projectionExpired = false;
@@ -773,6 +790,14 @@ app.addEventListener("click", (event) => {
     if (page === "settings") void loadAbout();
     window.scrollTo({ top: 0 });
     if (["history", "statistics", "changes"].includes(page)) void loadArchive();
+    if (
+      ["home", "chart"].includes(page) &&
+      data &&
+      archiveView?.addresses.find(
+        (entry) => entry.key === archiveView?.selectedKey,
+      )?.address.id !== data.snapshot.address.id
+    )
+      void loadArchive(null, archiveDate, true);
   }
   if (button.dataset.archiveDate)
     void loadArchive(
@@ -853,8 +878,14 @@ app.addEventListener("click", (event) => {
     case "check-updates":
       void checkForUpdates(false);
       break;
+    case "open-update":
+      updateFlow.show();
+      break;
+    case "download-update":
+      void updateFlow.download();
+      break;
     case "install-update":
-      void runUpdateInstallation();
+      void updateFlow.install();
       break;
     case "reload-about":
       void loadAbout();
@@ -1031,7 +1062,7 @@ void Promise.all([getSession(), getRuntimeInfo(), getViewPreferences()])
       render();
       void loadAbout();
     }
-    if (isTauri()) void checkForUpdates(true);
+    if (isTauri()) void updateFlow.restore().then(() => checkForUpdates(true));
   })
   .catch(() => {
     errorCode = "invalid_data";
@@ -1044,22 +1075,17 @@ setInterval(() => {
 
 if (isTauri()) {
   setInterval(() => void checkForUpdates(true), 3_600_000);
-  void listen<string>("update-phase", ({ payload }) => {
-    const label = document.querySelector("#update-phase");
-    if (label)
-      label.textContent =
-        payload === "waiting"
-          ? uk.updateWaiting
-          : payload === "verifying"
-            ? uk.updateVerifying
-            : payload === "installing"
-              ? uk.updateInstalling
-              : uk.updateDownload;
-  });
-  void listen<number>("update-progress", ({ payload }) => {
-    const progress =
-      document.querySelector<HTMLProgressElement>("#update-progress");
-    if (progress) progress.value = Math.max(0, Math.min(100, payload));
+  void listen<UpdateResult>("update-state", ({ payload }) =>
+    updateFlow.accept(payload),
+  );
+  void listen<string>("update-phase", ({ payload }) =>
+    updateFlow.phase(payload),
+  );
+  void listen<number>("update-progress", ({ payload }) =>
+    updateFlow.progress(payload),
+  );
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void updateFlow.restore();
   });
   void listen(
     "notification-permission-changed",

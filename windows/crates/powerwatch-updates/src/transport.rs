@@ -96,11 +96,21 @@ impl ReleaseClient {
         config: &UpdateConfig,
         now: DateTime<Utc>,
     ) -> Result<ReleaseManifest, UpdateError> {
+        self.check_with_envelope(config, now)
+            .map(|(manifest, _)| manifest)
+    }
+    /// Retain the signed envelope so a later process can verify it again offline.
+    pub fn check_with_envelope(
+        &self,
+        config: &UpdateConfig,
+        now: DateTime<Utc>,
+    ) -> Result<(ReleaseManifest, Vec<u8>), UpdateError> {
         let mut body = Vec::new();
         self.response(&config.endpoint()?, Duration::from_secs(30))?
             .take(MAX_MANIFEST + 1)
             .read_to_end(&mut body)
             .map_err(|_| UpdateError::Network)?;
-        verify_manifest(&body, config, now)
+        let manifest = verify_manifest(&body, config, now)?;
+        Ok((manifest, body))
     }
 }

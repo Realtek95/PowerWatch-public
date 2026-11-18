@@ -7,7 +7,7 @@ import {
   formatRange,
   formatTime,
 } from "../format";
-import type { ArchiveView, ChangeRecord } from "../types";
+import type { ArchiveView, ChangeRecord, Dashboard } from "../types";
 import { selectControl, dateControl } from "./controls";
 import { icon } from "../icons";
 
@@ -104,4 +104,51 @@ export function changeDetails(record: ChangeRecord): string {
     snapshot(uk.before, record.before) +
     snapshot(uk.after, record.after)
   );
+}
+
+/** Keep the current-address summary separate from the archive navigation. */
+export function currentChangesMarkup(
+  view: ArchiveView | null,
+  dashboard: Dashboard,
+): string {
+  const selected = view?.addresses.find(
+    (entry) => entry.key === view.selectedKey,
+  );
+  if (selected?.address.id !== dashboard.snapshot.address.id) return "";
+  const day = dashboard.selectedDay;
+  const relevant = (change: ChangeRecord["changes"][number]) => {
+    const periods = [change.before, change.after].filter(
+      (part) => part !== null,
+    );
+    return (
+      periods.length === 0 ||
+      periods.some((part) =>
+        day.intervals.some(
+          (interval) =>
+            Date.parse(part.end) > Date.parse(interval.start) &&
+            Date.parse(part.start) < Date.parse(interval.end),
+        ),
+      )
+    );
+  };
+  const original = view?.changes.find(
+    (item) =>
+      (item.after.queueDays ?? item.after.days).some(
+        (schedule) => schedule.date === day.date,
+      ) && item.changes.some(relevant),
+  );
+  if (!original) return "";
+  const record = { ...original, changes: original.changes.filter(relevant) };
+  const operator = record.changes.some((part) =>
+    ["source_status", "expected_restoration"].includes(part.kind),
+  );
+  const schedule = record.changes.some(
+    (part) => !["source_status", "expected_restoration"].includes(part.kind),
+  );
+  const periods = record.changes.filter((part) => part.before || part.after);
+  const preview =
+    schedule && periods.length === 1
+      ? changePreview({ ...record, changes: periods })
+      : "";
+  return `<section class="card current-changes" aria-label="${uk.currentChanges}"><div class="current-changes-icon">${icon("history")}</div><div class="current-changes-body"><h2>${uk.currentChanges}</h2>${schedule ? `<p>${uk.scheduleChanged}</p>` : ""}${preview ? `<div class="current-changes-preview">${preview}</div>` : ""}${operator ? `<p>${uk.operatorMessageChanged}</p>` : ""}<span class="muted">${formatMoment(record.detectedAt)}</span></div><button class="secondary-button" data-change="${record.id}">${uk.details}${icon("chevron")}</button></section>`;
 }

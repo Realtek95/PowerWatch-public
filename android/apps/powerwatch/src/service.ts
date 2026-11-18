@@ -28,6 +28,12 @@ export function checkUpdates(
 ): Promise<import("./types").UpdateResult> {
   return isTauri() ? invoke("check_updates", { automatic }) : readOnly();
 }
+export function getUpdateStatus(): Promise<import("./types").UpdateResult> {
+  return isTauri() ? invoke("get_update_status") : readOnly();
+}
+export function downloadUpdate(): Promise<import("./types").UpdateResult> {
+  return isTauri() ? invoke("download_update") : readOnly();
+}
 export function installUpdate(): Promise<
   "permission_required" | "installer_opened"
 > {

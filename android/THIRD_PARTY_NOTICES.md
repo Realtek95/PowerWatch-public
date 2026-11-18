@@ -174,6 +174,7 @@
 | [publicsuffix](https://crates.io/crates/publicsuffix/2.3.0) | 2.3.0 | MIT/Apache-2.0 | [LICENSE](THIRD_PARTY_NOTICES/publicsuffix-2.3.0/LICENSE), [LICENSE-APACHE](THIRD_PARTY_NOTICES/publicsuffix-2.3.0/LICENSE-APACHE) |
 | [quick-xml](https://crates.io/crates/quick-xml/0.42.0) | 0.42.0 | MIT | [LICENSE-MIT.md](THIRD_PARTY_NOTICES/quick-xml-0.42.0/LICENSE-MIT.md) |
 | [quote](https://crates.io/crates/quote/1.0.47) | 1.0.47 | MIT OR Apache-2.0 | [LICENSE-APACHE](THIRD_PARTY_NOTICES/quote-1.0.47/LICENSE-APACHE), [LICENSE-MIT](THIRD_PARTY_NOTICES/quote-1.0.47/LICENSE-MIT) |
+| [rand_core](https://crates.io/crates/rand_core/0.10.1) | 0.10.1 | MIT OR Apache-2.0 | [COPYRIGHT](THIRD_PARTY_NOTICES/rand_core-0.10.1/COPYRIGHT), [LICENSE-APACHE](THIRD_PARTY_NOTICES/rand_core-0.10.1/LICENSE-APACHE), [LICENSE-MIT](THIRD_PARTY_NOTICES/rand_core-0.10.1/LICENSE-MIT) |
 | [raw-window-handle](https://crates.io/crates/raw-window-handle/0.6.2) | 0.6.2 | MIT OR Apache-2.0 OR Zlib | [LICENSE-APACHE.md](THIRD_PARTY_NOTICES/raw-window-handle-0.6.2/LICENSE-APACHE.md), [LICENSE-MIT.md](THIRD_PARTY_NOTICES/raw-window-handle-0.6.2/LICENSE-MIT.md), [LICENSE-ZLIB.md](THIRD_PARTY_NOTICES/raw-window-handle-0.6.2/LICENSE-ZLIB.md) |
 | [ref-cast](https://crates.io/crates/ref-cast/1.0.27) | 1.0.27 | MIT OR Apache-2.0 | [LICENSE-APACHE](THIRD_PARTY_NOTICES/ref-cast-1.0.27/LICENSE-APACHE), [LICENSE-MIT](THIRD_PARTY_NOTICES/ref-cast-1.0.27/LICENSE-MIT) |
 | [ref-cast-impl](https://crates.io/crates/ref-cast-impl/1.0.27) | 1.0.27 | MIT OR Apache-2.0 | [LICENSE-APACHE](THIRD_PARTY_NOTICES/ref-cast-impl-1.0.27/LICENSE-APACHE), [LICENSE-MIT](THIRD_PARTY_NOTICES/ref-cast-impl-1.0.27/LICENSE-MIT) |
@@ -296,6 +297,7 @@
 | [zerofrom](https://crates.io/crates/zerofrom/0.1.8) | 0.1.8 | Unicode-3.0 | [LICENSE](THIRD_PARTY_NOTICES/zerofrom-0.1.8/LICENSE) |
 | [zerofrom-derive](https://crates.io/crates/zerofrom-derive/0.1.8) | 0.1.8 | Unicode-3.0 | [LICENSE](THIRD_PARTY_NOTICES/zerofrom-derive-0.1.8/LICENSE) |
 | [zeroize](https://crates.io/crates/zeroize/1.9.1) | 1.9.1 | Apache-2.0 OR MIT | [LICENSE-APACHE](THIRD_PARTY_NOTICES/zeroize-1.9.1/LICENSE-APACHE), [LICENSE-MIT](THIRD_PARTY_NOTICES/zeroize-1.9.1/LICENSE-MIT) |
+| [zeroize_derive](https://crates.io/crates/zeroize_derive/1.5.0) | 1.5.0 | Apache-2.0 OR MIT | [LICENSE-APACHE](THIRD_PARTY_NOTICES/zeroize_derive-1.5.0/LICENSE-APACHE), [LICENSE-MIT](THIRD_PARTY_NOTICES/zeroize_derive-1.5.0/LICENSE-MIT) |
 | [zerotrie](https://crates.io/crates/zerotrie/0.2.5) | 0.2.5 | Unicode-3.0 | [LICENSE](THIRD_PARTY_NOTICES/zerotrie-0.2.5/LICENSE) |
 | [zerovec](https://crates.io/crates/zerovec/0.11.9) | 0.11.9 | Unicode-3.0 | [LICENSE](THIRD_PARTY_NOTICES/zerovec-0.11.9/LICENSE) |
 | [zerovec-derive](https://crates.io/crates/zerovec-derive/0.11.7) | 0.11.7 | Unicode-3.0 | [LICENSE](THIRD_PARTY_NOTICES/zerovec-derive-0.11.7/LICENSE) |

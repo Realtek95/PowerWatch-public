@@ -2435,3 +2435,93 @@ dialog::backdrop {
   padding: 0.75rem 1rem;
   border-radius: 12px;
 }
+
+.current-changes {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  border-color: var(--border);
+  border-left: 3px solid var(--green);
+}
+.current-changes-icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 12px;
+  color: var(--green);
+  background: var(--subtle);
+}
+.current-changes-body {
+  flex: 1;
+  min-width: 0;
+}
+.current-changes h2 {
+  font-size: 1rem;
+  margin: 0 0 0.4rem;
+}
+.current-changes p {
+  margin: 0.25rem 0;
+}
+.current-changes-preview {
+  color: var(--green);
+  font-weight: 600;
+}
+.current-changes .muted {
+  display: block;
+  font-size: 0.78rem;
+  margin-top: 0.5rem;
+}
+.current-changes > button {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+@media (max-width: 480px) {
+  .current-changes {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .current-changes-body {
+    flex-basis: calc(100% - 4rem);
+  }
+  .current-changes > button {
+    margin-left: auto;
+  }
+}
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 1rem;
+  margin-bottom: 1rem;
+  background: var(--subtle);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.update-banner > div {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.update-banner .icon {
+  flex-shrink: 0;
+  color: var(--green);
+}
+.update-banner button {
+  flex-shrink: 0;
+}
+@media (max-width: 480px) {
+  .update-banner {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .update-banner button {
+    align-self: flex-end;
+  }
+}

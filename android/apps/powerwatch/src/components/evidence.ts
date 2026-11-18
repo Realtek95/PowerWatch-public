@@ -5,7 +5,7 @@ import { escapeHtml as html, formatMoment } from "../format";
 export function evidenceMarkup(value: Dashboard): string {
   const parts = value.snapshot.provenance ?? [];
   const start = value.bands[0]?.start;
-  const end = value.bands.at(-1)?.end;
+  const end = value.bands[value.bands.length - 1]?.end;
   const entries = parts
     .filter(
       (part) =>

@@ -822,6 +822,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         set_automatic_updates,
         open_app_link,
         updates::check_updates,
+        updates::get_update_status,
+        updates::download_update,
         updates::install_update,
         get_background_status,
         open_background_settings,

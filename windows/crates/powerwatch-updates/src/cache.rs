@@ -1,5 +1,36 @@
 //! Bounded installer cache. Only files created by our downloader are owned here.
 use crate::ReleaseAsset;
+use chrono::{DateTime, TimeDelta, Utc};
+use serde::{Deserialize, Serialize};
+/// A restart retains the signature, not a trusted plaintext interpretation.
+#[derive(Deserialize, Serialize)]
+pub struct SavedManifest {
+    pub envelope: String,
+    pub checked_at: DateTime<Utc>,
+}
+impl SavedManifest {
+    pub fn verify(
+        &self,
+        config: &crate::UpdateConfig,
+        current: &str,
+        highest: Option<&str>,
+        now: DateTime<Utc>,
+    ) -> Result<Option<crate::ReleaseManifest>, crate::UpdateError> {
+        if self.checked_at > now + TimeDelta::minutes(5)
+            || now - self.checked_at >= TimeDelta::days(7)
+        {
+            return Ok(None);
+        }
+        let manifest = crate::verify_manifest(self.envelope.as_bytes(), config, now)?;
+        if !crate::newer_version(&manifest.version, current)?
+            || highest
+                .is_some_and(|value| crate::newer_version(value, &manifest.version).unwrap_or(true))
+        {
+            return Ok(None);
+        }
+        Ok(Some(manifest))
+    }
+}
 use sha2::{Digest, Sha256};
 use std::{
     fs,
