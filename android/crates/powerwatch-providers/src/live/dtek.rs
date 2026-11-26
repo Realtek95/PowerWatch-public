@@ -60,6 +60,7 @@ pub struct AddressReport {
     pub binding: ProviderAddressId,
     pub catalog: AddressCatalogSelection,
     pub queue: Option<Queue>,
+    internal_queue: Option<Queue>,
     pub event: Option<OutageEvent>,
     pub evidence: SourceEvidence,
     pub source_status: SourceStatus,
@@ -501,7 +502,34 @@ impl Dtek {
         }
         let (city, street, response, checked) =
             self.read_street(http, operator, settlement, &input.street, now)?;
-        parse_response(response, &city, &street, &input.house, checked)
+        let mut report = parse_response(response, &city, &street, &input.house, checked)?;
+        if report.queue.is_none()
+            && let Some(queue) = report.internal_queue.clone()
+            && let Ok(plan) = self.forecast(http, &queue, Utc::now())
+        {
+            confirm_hidden_queue(&mut report, &queue, &plan, Utc::now());
+        }
+        Ok(report)
+    }
+}
+fn confirm_hidden_queue(
+    report: &mut AddressReport,
+    queue: &Queue,
+    plan: &super::SourceSchedule,
+    now: DateTime<Utc>,
+) {
+    use powerwatch_core::grid::SourceScope;
+    if report.internal_queue.as_ref() == Some(queue)
+        && report.evidence.usable_at(now, TimeDelta::minutes(45))
+        && plan.evidence.scope == SourceScope::Queue(queue.clone())
+        && plan.evidence.usable_at(now, TimeDelta::days(2))
+        && plan
+            .days
+            .iter()
+            .flat_map(|day| &day.intervals)
+            .any(|part| part.end > now && part.state != ScheduleState::Unknown)
+    {
+        report.queue = Some(queue.clone());
     }
 }
 fn invalidates_session(error: &FetchError) -> bool {
@@ -577,9 +605,7 @@ fn parse_response(
         status: EvidenceStatus::Verified,
         content_hash: None,
     };
-    let queue = if response.show_queue
-        && let [code] = record.sub_type_reason.as_slice()
-    {
+    let internal_queue = if let [code] = record.sub_type_reason.as_slice() {
         code.strip_prefix("GPV").and_then(|value| {
             let (group, subgroup) = value.split_once('.')?;
             if group.parse::<u16>().ok()? == 0 || subgroup.parse::<u16>().ok()? == 0 {
@@ -593,6 +619,10 @@ fn parse_response(
     } else {
         None
     };
+    let queue = response
+        .show_queue
+        .then(|| internal_queue.clone())
+        .flatten();
     let no_outage = record.kind.is_empty()
         && record.sub_type.is_empty()
         && record.start_date.is_empty()
@@ -650,6 +680,7 @@ fn parse_response(
         },
         binding,
         queue,
+        internal_queue,
         source_status: if no_outage {
             SourceStatus::Unknown
         } else {

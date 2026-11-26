@@ -186,9 +186,11 @@ fn project_dashboard(
 }
 impl AppState {
     fn repo(&self) -> Result<std::sync::MutexGuard<'_, Repository>, CommandError> {
-        self.repository.lock().map_err(|_| CommandError {
+        let mut repository = self.repository.lock().map_err(|_| CommandError {
             code: "internal_error",
-        })
+        })?;
+        repository.book = repository.store.load_book()?;
+        Ok(repository)
     }
     fn now(&self) -> Result<DateTime<Utc>, CommandError> {
         Ok(Utc::now())

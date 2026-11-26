@@ -74,6 +74,10 @@ export function updateMarkup(result: UpdateResult, platform?: string): string {
   if (!active && result.phase !== "error" && result.status !== "available")
     return `<p>${result.status === "current" ? uk.updateCurrent : result.status === "disabled" ? uk.updatesUnpublished : uk.updateSkipped}</p>`;
   const ready = result.packageState === "ready";
+  const progress =
+    result.phase === "checking"
+      ? `<div id="update-progress" class="update-busy" role="progressbar" aria-label="${html(description(result, platform))}"><span></span></div>`
+      : `<progress id="update-progress" max="100" value="${result.progress ?? 0}" aria-label="${html(description(result, platform))}"></progress>`;
   const expired = result.errorCode === "update_expired" || !result.version;
   const action = expired
     ? "check-updates"
@@ -91,5 +95,5 @@ export function updateMarkup(result: UpdateResult, platform?: string): string {
       : result.packageState === "partial"
         ? uk.updateRetry
         : uk.updateInstall;
-  return `${result.version ? `<p><strong>${uk.updateAvailable}: ${html(result.version)}</strong></p>` : ""}<p id="update-phase" role="status">${html(description(result, platform))}</p>${active ? `<progress id="update-progress" max="100" ${result.phase === "checking" ? "" : `value="${result.progress ?? 0}"`} aria-label="${html(description(result, platform))}"></progress>${["downloading", "waiting"].includes(result.phase ?? "") ? `<p data-update-percent>${result.progress ?? 0}%</p>` : ""}` : ""}${!active && result.version ? `<p class="muted">${uk.updateSize}: ${Math.ceil((result.size ?? 0) / 1024 / 1024)} МБ</p><p class="release-notes">${html(result.notes ?? "")}</p>${ready ? "" : `<p>${platform === "android" ? uk.updateConsentAndroid : uk.updateConsentWindows}</p>`}` : ""}<div class="form-actions">${active ? "" : `<button class="primary-button" data-action="${action}">${label}</button>`}<button class="text-button" data-action="close-dialog">${active ? uk.updateMinimize : uk.close}</button></div>`;
+  return `${result.version ? `<p><strong>${uk.updateAvailable}: ${html(result.version)}</strong></p>` : ""}<p id="update-phase" role="status">${html(description(result, platform))}</p>${active ? `${progress}${["downloading", "waiting"].includes(result.phase ?? "") ? `<p data-update-percent>${result.progress ?? 0}%</p>` : ""}` : ""}${!active && result.version ? `<p class="muted">${uk.updateSize}: ${Math.ceil((result.size ?? 0) / 1024 / 1024)} МБ</p><p class="release-notes">${html(result.notes ?? "")}</p>${ready ? "" : `<p>${platform === "android" ? uk.updateConsentAndroid : uk.updateConsentWindows}</p>`}` : ""}<div class="form-actions">${active ? "" : `<button class="primary-button" data-action="${action}">${label}</button>`}<button class="text-button" data-action="close-dialog">${active ? uk.updateMinimize : uk.close}</button></div>`;
 }

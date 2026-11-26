@@ -36,7 +36,7 @@ fn main() {
             id.starts_with("UA") && id.len() == 19 && id[2..].bytes().all(|b| b.is_ascii_digit())
         );
         let archive = directory
-            .join(format!("{id}.sqlite3.gz"))
+            .join(format!("{id}.sqlite3.xz"))
             .canonicalize()
             .unwrap();
         let manifest = directory

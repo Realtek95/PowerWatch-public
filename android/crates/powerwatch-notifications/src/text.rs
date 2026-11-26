@@ -46,6 +46,12 @@ pub fn warning(at: DateTime<Utc>, sending_at: DateTime<Utc>) -> NotificationText
 pub fn forecast_start(at: DateTime<Utc>) -> NotificationText {
     NotificationText::new("Планове відключення", forecast(at))
 }
+pub fn queue_changed(before: &str, after: &str) -> NotificationText {
+    NotificationText::new(
+        "Чергу змінено",
+        format!("Оператор змінив вашу чергу: {before} → {after}."),
+    )
+}
 pub fn forecast_end(at: DateTime<Utc>) -> NotificationText {
     NotificationText::new("Планове відновлення", forecast(at))
 }

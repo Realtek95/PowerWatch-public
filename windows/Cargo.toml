@@ -3,7 +3,7 @@ members = ["crates/powerwatch-core", "crates/powerwatch-addresses", "crates/powe
 resolver = "3"
 
 [workspace.package]
-version = "1.0.9"
+version = "1.1.0"
 edition = "2024"
 rust-version = "1.99"
 license = "MIT"
@@ -25,3 +25,6 @@ powerwatch-updates = { path = "crates/powerwatch-updates" }
 # The managed Windows filesystem cannot hard-link incremental cache files.
 [profile.dev]
 incremental = false
+
+[profile.release]
+strip = "symbols"

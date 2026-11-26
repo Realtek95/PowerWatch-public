@@ -191,6 +191,21 @@ function scheduleMarkup(value: Dashboard, archiveMode = false): string {
 }
 
 function refreshCurrentChanges(next: Dashboard): void {
+  const saved = session?.addresses.find((entry) => entry.id === addressId);
+  const observed = next.snapshot.address;
+  if (
+    saved?.address.details?.queue &&
+    saved.address.id === observed.id &&
+    saved.address.providerId === observed.providerId &&
+    saved.address.queue !== observed.queue &&
+    observed.details?.queue?.code === observed.queue
+  ) {
+    saved.address = {
+      ...saved.address,
+      queue: observed.queue,
+      details: observed.details,
+    };
+  }
   if (
     data &&
     ["home", "chart"].includes(page) &&

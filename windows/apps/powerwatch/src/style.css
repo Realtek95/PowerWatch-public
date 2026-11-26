@@ -2198,6 +2198,35 @@ dialog::backdrop {
   width: 100%;
   accent-color: var(--accent);
 }
+.update-busy {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--subtle);
+}
+.update-busy > span {
+  display: block;
+  width: 32%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
+  will-change: transform;
+  animation: update-sweep 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes update-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(313%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .update-busy > span {
+    animation: none;
+    transform: translateX(106%);
+  }
+}
 
 @keyframes page-enter {
   from {

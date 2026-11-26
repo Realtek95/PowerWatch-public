@@ -12,5 +12,6 @@ serde.workspace = true
 thiserror.workspace = true
 unicode-normalization = "=0.1.26"
 flate2 = "1"
+lzma-rust2 = { version = "=0.24.0", default-features = false, features = ["std", "xz"] }
 sha2 = "0.10"
 

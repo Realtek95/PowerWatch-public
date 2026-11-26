@@ -1,7 +1,7 @@
 //! Immutable prepared country catalog. No XML/PBF processing or operator
 //! inference happens here; a geographic address never proves an outage queue.
 mod install;
-pub use install::{CatalogManifest, install};
+pub use install::{CatalogCompression, CatalogManifest, install};
 use powerwatch_core::model::CatalogEntry;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use serde::{Deserialize, Serialize};

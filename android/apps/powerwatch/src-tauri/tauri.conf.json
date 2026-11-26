@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "PowerWatch",
-  "version": "1.0.9",
+  "version": "1.1.0",
   "identifier": "ua.powerwatch.app",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -37,7 +37,7 @@
     "shortDescription": "Локальний моніторинг графіків електропостачання",
     "android": {
       "minSdkVersion": 28,
-      "versionCode": 1000009
+      "versionCode": 1001000
     },
     "windows": {
       "nsis": {

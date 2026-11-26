@@ -1,5 +1,6 @@
 use crate::{Catalog, CatalogError, Result};
 use flate2::read::GzDecoder;
+use lzma_rust2::XzReader;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::{
@@ -8,12 +9,21 @@ use std::{
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
 };
+#[derive(Clone, Copy, Debug, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CatalogCompression {
+    #[default]
+    Gzip,
+    Xz,
+}
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogManifest {
     pub schema: u32,
     pub sha256: String,
     pub bytes: u64,
+    #[serde(default)]
+    pub compression: CatalogCompression,
 }
 /// Install a verified immutable version once. Subsequent opens read SQLite
 /// directly; user data and older catalog versions are never rewritten.
@@ -50,7 +60,13 @@ pub fn install(
             .create_new(true)
             .write(true)
             .open(&temp)?;
-        let mut input = GzDecoder::new(compressed).take(manifest.bytes + 1);
+        let decoder: Box<dyn Read + '_> = match manifest.compression {
+            CatalogCompression::Gzip => Box::new(GzDecoder::new(compressed)),
+            CatalogCompression::Xz => {
+                Box::new(XzReader::new_mem_limit(compressed, false, 32 * 1024))
+            }
+        };
+        let mut input = decoder.take(manifest.bytes + 1);
         let mut hash = Sha256::new();
         let mut length = 0_u64;
         let mut buffer = [0_u8; 65536];

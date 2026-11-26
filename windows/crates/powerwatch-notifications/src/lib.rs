@@ -50,7 +50,9 @@ impl NotificationPreferences {
                 NotificationKind::Warning => !self.lead_minutes.is_empty(),
                 NotificationKind::ForecastStart => self.forecast_start,
                 NotificationKind::ForecastEnd => self.forecast_end,
-                NotificationKind::ScheduleChanged => self.schedule_changes,
+                NotificationKind::ScheduleChanged | NotificationKind::QueueChanged => {
+                    self.schedule_changes
+                }
                 NotificationKind::SourceOutage
                 | NotificationKind::SourceRestored
                 | NotificationKind::SourceCleared => false,
@@ -98,6 +100,7 @@ pub enum NotificationKind {
     ForecastStart,
     ForecastEnd,
     ScheduleChanged,
+    QueueChanged,
     RestorationChanged,
     SourceOutage,
     SourceRestored,
@@ -197,6 +200,14 @@ impl PlannedNotification {
         if self.kind == NotificationKind::ScheduleChanged {
             return revision::updates_usable(snapshot, now, interval);
         }
+        if self.kind == NotificationKind::QueueChanged {
+            return snapshot.address_check.as_ref().is_some_and(|check| {
+                check.evidence.usable_at(now, TimeDelta::minutes(45))
+                    && check.queue.as_ref().is_some_and(|queue| {
+                        snapshot.address.queue.as_deref() == Some(queue.code.as_str())
+                    })
+            });
+        }
         if matches!(
             self.kind,
             NotificationKind::SourceOutage
@@ -214,6 +225,11 @@ impl PlannedNotification {
     pub fn matches_snapshot(&self, snapshot: &ScheduleSnapshot, now: DateTime<Utc>) -> bool {
         let Some(boundary) = self.boundary else {
             return match self.kind {
+                NotificationKind::QueueChanged => snapshot
+                    .address
+                    .queue
+                    .as_ref()
+                    .is_some_and(|queue| self.key.ends_with(&format!("|{queue}"))),
                 NotificationKind::SourceOutage => {
                     snapshot.source_status == SourceStatus::ReportedUnavailable
                         && (!self.key.contains("|address:")
@@ -417,6 +433,38 @@ pub fn plan_with_reference(
         .unwrap_or_else(|| ForecastReference::from_snapshot(snapshot));
     let (next, update) = reference.advance(snapshot, now, interval);
     let version = format!("revision-{}", next.revision);
+    let queue_changed = previous.and_then(|old| {
+        let before = old.address.queue.as_deref()?;
+        let after = snapshot.address.queue.as_deref()?;
+        let details = old.address.details.as_ref()?;
+        let check = snapshot.address_check.as_ref()?;
+        (before != after
+            && details.queue.is_some()
+            && address_current
+            && check
+                .queue
+                .as_ref()
+                .is_some_and(|queue| queue.code == after)
+            && snapshot
+                .address
+                .details
+                .as_ref()
+                .is_some_and(|details| details.queue.as_ref() == check.queue.as_ref()))
+        .then_some((before, after))
+    });
+    if prefs.schedule_changes
+        && let Some((before, after)) = queue_changed
+    {
+        plans.push(plan(
+            (key, local_id),
+            snapshot,
+            NotificationKind::QueueChanged,
+            now,
+            &format!("{version}|{after}"),
+            text::queue_changed(before, after),
+            prefs,
+        ));
+    }
     let changed = update.is_some() && prefs.schedule_changes;
     if changed {
         plans.push(plan(
@@ -433,6 +481,7 @@ pub fn plan_with_reference(
         && (forecast_current || address_current)
         && prefs.restoration_changes
         && !changed
+        && queue_changed.is_none()
         && old.source_status == SourceStatus::ReportedUnavailable
         && snapshot.source_status == SourceStatus::ReportedUnavailable
         && let (Some(before), Some(after)) =

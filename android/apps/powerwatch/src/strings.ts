@@ -164,7 +164,7 @@ export const uk = {
   notificationKinds: {
     forecastStart: "Початок періоду за графіком",
     forecastEnd: "Завершення періоду за графіком",
-    scheduleChanges: "Зміни графіка",
+    scheduleChanges: "Зміни графіка й черги",
     restorationChanges: "Зміна часу відновлення",
   },
   notificationStates: {

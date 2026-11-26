@@ -1,6 +1,6 @@
 """Встановити перевірений пакет адресних даних для збірки з коду."""
 import argparse
-import gzip
+import lzma
 import hashlib
 import json
 import os
@@ -23,7 +23,7 @@ def main():
     index = json.loads(index_bytes)
     names = {"index.json", "DATA_LICENSE.md"}
     for entry in index:
-        names.update({entry["oblastId"] + ".sqlite3.gz", entry["oblastId"] + ".sqlite3.json"})
+        names.update({entry["oblastId"] + ".sqlite3.xz", entry["oblastId"] + ".sqlite3.json"})
     destination = (root / "assets/data/address-catalog").resolve()
     if not destination.is_relative_to(root.resolve()):
         raise SystemExit("Некоректний каталог призначення.")
@@ -36,14 +36,14 @@ def main():
             manifest_name = identifier + ".sqlite3.json"
             if json.loads(package.read(manifest_name)) != entry:
                 raise SystemExit("Не збігається обласний маніфест.")
-            name = identifier + ".sqlite3.gz"
+            name = identifier + ".sqlite3.xz"
             if package.getinfo(name).file_size != entry["compressedBytes"]:
                 raise SystemExit("Не збігається розмір обласного пакета.")
             archive = staging / name
             archive.write_bytes(package.read(name))
             size = 0
             digest = hashlib.sha256()
-            with gzip.open(archive, "rb") as source:
+            with lzma.open(archive, "rb") as source:
                 while chunk := source.read(65536):
                     size += len(chunk)
                     if size > entry["bytes"]:

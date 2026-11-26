@@ -240,9 +240,6 @@ impl LiveService {
             .transpose()?
             .flatten();
         let direct = direct.or_else(|| retained_address_check(previous, address, queue, now));
-        if details.queue.is_some() && direct.as_ref().is_some_and(|report| report.queue.is_none()) {
-            return Err(crate::ProviderError::UnresolvedAddress);
-        }
         let effective_queue = if details.queue.is_some() {
             direct
                 .as_ref()
@@ -375,7 +372,7 @@ impl LiveService {
             .details
             .as_ref()
             .is_some_and(|details| details.queue.is_some())
-            && let Some(report) = &direct
+            && let Some(report) = direct.as_ref().filter(|report| report.queue.is_some())
         {
             observed_address.queue = report.queue.as_ref().map(|queue| queue.code.clone());
             if let Some(details) = &mut observed_address.details {
